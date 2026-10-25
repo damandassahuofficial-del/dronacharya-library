@@ -79,7 +79,6 @@ export default function Dashboard() {
   const [editStudent, setEditStudent] = useState<Student | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Renewal Form State
   const [renewFormData, setRenewFormData] = useState<{
     plan: string;
     startDate: string;
@@ -523,14 +522,15 @@ export default function Dashboard() {
       });
 
       if (editStudent) {
+        const targetRowIndex = editStudent.rowIndex;
         setStudents((prev) =>
-          prev.map((s) => (s.rowIndex === editStudent.rowIndex ? { ...payload, rowIndex: editStudent.rowIndex } : s))
+          prev.map((s) => (s.rowIndex === targetRowIndex ? ({ ...payload, rowIndex: targetRowIndex } as Student) : s))
         );
         setEditStudent(null);
       } else {
         const generatedId = `DL-${students.length < 9 ? "0" + (students.length + 1) : students.length + 1}`;
-        const newRecord = { ...payload, studentId: generatedId, rowIndex: students.length + 2 };
-        setStudents((prev) => [...prev, newRecord as Student]);
+        const newRecord: Student = { ...(payload as Student), studentId: generatedId, rowIndex: students.length + 2 };
+        setStudents((prev) => [...prev, newRecord]);
 
         setRenewalHistory((prev) => [
           {
