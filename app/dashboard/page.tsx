@@ -172,10 +172,7 @@ export default function Dashboard() {
     if (!baseDateStr || baseDateStr === "-") return "";
     const s = String(baseDateStr).trim();
 
-    let y = 0;
-    let m = 0;
-    let d = 0;
-
+    let y = 0, m = 0, d = 0;
     if (s.includes("-")) {
       const parts = s.split("T")[0].split("-");
       if (parts[0].length === 4) {
@@ -218,11 +215,7 @@ export default function Dashboard() {
     const daysInTargetMonth = new Date(targetYear, targetMonth, 0).getDate();
     const finalDay = Math.min(d, daysInTargetMonth);
 
-    const padYear = String(targetYear);
-    const padMonth = String(targetMonth).padStart(2, "0");
-    const padDay = String(finalDay).padStart(2, "0");
-
-    return `${padYear}-${padMonth}-${padDay}`;
+    return `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(finalDay).padStart(2, "0")}`;
   };
 
   const parseDateToTimestamp = (dateStr: string): number => {
@@ -353,7 +346,6 @@ export default function Dashboard() {
     );
 
     const hasAdmissionLogged = rawLogs.some((h) => h.remarks?.toLowerCase().includes("admission"));
-
     const combined: RenewalLog[] = [...rawLogs];
     if (!hasAdmissionLogged) {
       const originalFirstRenDate = calculateRenewalDateFromBase(st.admDate, st.plan || "1 Month");
@@ -723,22 +715,38 @@ export default function Dashboard() {
 
   return (
     <div className="flex h-screen bg-[#f1eee7] text-neutral-800 font-sans antialiased overflow-hidden select-none relative">
+      {/* Mobile Backdrop for Sidebar */}
+      {isSidebarOpen && (
+        <div
+          onClick={() => setIsSidebarOpen(false)}
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30 md:hidden transition-opacity"
+        />
+      )}
+
       {/* 1. Sidebar */}
       <aside
         className={
           (isSidebarOpen ? "w-64" : "w-0 -translate-x-full") +
-          " bg-[#faf8f4] border-r border-[#e3dccb] flex flex-col justify-between flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden z-20 relative"
+          " bg-[#faf8f4] border-r border-[#e3dccb] flex flex-col justify-between flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden z-40 relative md:z-20"
         }
       >
         <div className="w-64">
-          <div className="h-16 flex items-center gap-3 px-5 border-b border-[#e3dccb]">
-            <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-md">
-              📚
+          <div className="h-16 flex items-center justify-between px-5 border-b border-[#e3dccb]">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-md">
+                📚
+              </div>
+              <div>
+                <h1 className="text-sm font-black text-neutral-900 leading-none">DRONACHARYA</h1>
+                <p className="text-[10px] text-neutral-500 font-bold tracking-widest uppercase mt-1">LIBRARY ERP</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-sm font-black text-neutral-900 leading-none">DRONACHARYA</h1>
-              <p className="text-[10px] text-neutral-500 font-bold tracking-widest uppercase mt-1">LIBRARY ERP</p>
-            </div>
+            <button
+              onClick={() => setIsSidebarOpen(false)}
+              className="md:hidden text-neutral-400 hover:text-neutral-700 text-sm p-1 font-bold"
+            >
+              ✕
+            </button>
           </div>
 
           <nav className="p-3.5 space-y-1.5 text-xs font-semibold">
@@ -800,23 +808,26 @@ export default function Dashboard() {
         </div>
       </aside>
 
-      {/* Slide Handle */}
-      <button
+      {/* Vertical Continuous Top-to-Bottom Slider Strip Handle */}
+      <div
         onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-        title={isSidebarOpen ? "Slide to Hide Sidebar" : "Slide to Show Sidebar"}
-        className={
-          "absolute top-1/2 -translate-y-1/2 z-30 transition-all duration-300 ease-in-out " +
-          (isSidebarOpen ? "left-[250px]" : "left-1") +
-          " w-5 h-16 rounded-full bg-[#faf8f4] hover:bg-neutral-900 hover:text-white border border-[#d6ccb8] shadow-md flex items-center justify-center text-[10px] font-black text-neutral-600 cursor-pointer"
-        }
+        title={isSidebarOpen ? "Click to collapse sidebar" : "Click to expand sidebar"}
+        className="hidden md:flex w-2.5 h-full bg-[#f1eee7] hover:bg-amber-300/80 cursor-col-resize transition-colors items-center justify-center flex-shrink-0 z-30 group select-none border-r border-[#e3dccb]"
       >
-        {isSidebarOpen ? "◀" : "▶"}
-      </button>
+        <div className="w-0.5 h-16 bg-[#d6ccb8] group-hover:bg-amber-700 rounded-full transition-colors" />
+      </div>
 
       {/* 2. Main Workspace */}
       <div className="flex-1 flex flex-col h-full overflow-hidden relative">
-        <header className="h-16 bg-[#faf8f4] border-b border-[#e3dccb] flex items-center justify-between px-6 flex-shrink-0">
+        <header className="h-16 bg-[#faf8f4] border-b border-[#e3dccb] flex items-center justify-between px-4 sm:px-6 flex-shrink-0">
           <div className="flex items-center gap-2.5">
+            <button
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="p-1.5 rounded-lg border border-[#e3dccb] bg-[#ede5d4] hover:bg-[#e4dbca] text-xs font-bold text-neutral-700 transition"
+              title="Toggle Sidebar"
+            >
+              {isSidebarOpen ? "◀" : "▶"}
+            </button>
             <span className="text-base">
               {activeMenu === "Seats" ? "🪑" : activeMenu === "Students" ? "👥" : "📊"}
             </span>
@@ -1002,7 +1013,7 @@ export default function Dashboard() {
                   className="overflow-x-auto overflow-y-auto flex-1 w-full"
                 >
                   <table className="w-full text-left text-xs border-collapse">
-                    <thead className="sticky top-0 z-10 border-b border-[#e3dccb] text-neutral-500 font-bold uppercase tracking-wider text-[11px] bg-[#f5f1e8] shadow-sm">
+                    <thead className="sticky top-0 z-10 border-b border-[#e3dccb] text-neutral-500 font-bold uppercase tracking-wider text-[11px] bg-[#f5f1e8] shadow-sm select-none">
                       <tr>
                         <th className="py-3 px-3">S.NO</th>
                         <th className="py-3 px-4">STUDENT DETAILS</th>
@@ -1011,7 +1022,7 @@ export default function Dashboard() {
                         <th className="py-3 px-4">CURRENT MEMBERSHIP PERIOD</th>
                         <th className="py-3 px-3 text-center">TYPE</th>
                         <th className="py-3 px-3 text-center">STATUS</th>
-                        <th className="py-3 px-4 text-center">QUICK ACTIONS</th>
+                        <th className="py-3 px-4 text-center">ACTIONS</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#e3dccb]/70 text-neutral-800">
@@ -1049,7 +1060,9 @@ export default function Dashboard() {
                             <tr
                               key={st.rowIndex || idx}
                               data-index={idx + 1}
-                              className={"transition duration-150 " + rowColorClass}
+                              onClick={() => setViewStudent(st)}
+                              title="Click row to view student profile"
+                              className={"transition duration-150 cursor-pointer " + rowColorClass}
                             >
                               <td className="py-3 px-3 font-semibold text-neutral-500">{idx + 1}</td>
 
@@ -1071,7 +1084,7 @@ export default function Dashboard() {
                                   <span className="text-amber-700 mr-1">📞</span> {st.phone}
                                 </p>
                                 <p className="text-[11px] text-neutral-500">Alt: {st.altPhone}</p>
-                                <p className="text-[11px] text-neutral-500">📍 {st.address}</p>
+                                <p className="text-[11px] text-neutral-500 truncate max-w-xs">📍 {st.address}</p>
                               </td>
 
                               <td className="py-3 px-3 text-center">
@@ -1084,7 +1097,6 @@ export default function Dashboard() {
                                 )}
                               </td>
 
-                              {/* CURRENT MEMBERSHIP PERIOD */}
                               <td className="py-3 px-4 space-y-0.5">
                                 <p className="font-bold text-neutral-900">
                                   {activePeriod.plan}
@@ -1129,7 +1141,10 @@ export default function Dashboard() {
 
                               <td className="py-3 px-3 text-center">
                                 <button
-                                  onClick={() => handleQuickToggleStatus(st)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleQuickToggleStatus(st);
+                                  }}
                                   title="Click to toggle Active / Inactive"
                                   className={
                                     "px-2.5 py-0.5 rounded-full text-[10px] font-bold transition hover:opacity-80 " +
@@ -1142,9 +1157,12 @@ export default function Dashboard() {
                                 </button>
                               </td>
 
-                              {/* ACTIONS */}
+                              {/* ACTIONS: Eye button removed, clicks isolated */}
                               <td className="py-3 px-4 text-center">
-                                <div className="flex items-center justify-center gap-1.5">
+                                <div
+                                  className="flex items-center justify-center gap-1.5"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
                                   <button
                                     onClick={() => openRenewModal(st)}
                                     title="Open Renewal Form"
@@ -1167,17 +1185,9 @@ export default function Dashboard() {
                                   </button>
 
                                   <button
-                                    onClick={() => setViewStudent(st)}
-                                    title="View Personal Details"
-                                    className="p-1 text-neutral-500 hover:text-blue-600 transition"
-                                  >
-                                    👁️
-                                  </button>
-
-                                  <button
                                     onClick={() => setViewHistoryStudent(st)}
                                     title="View Payment Receipts Ledger"
-                                    className="p-1 text-neutral-500 hover:text-emerald-700 transition"
+                                    className="p-1 text-neutral-600 hover:text-emerald-700 transition font-bold"
                                   >
                                     🧾
                                   </button>
@@ -1202,7 +1212,7 @@ export default function Dashboard() {
                                       setShowAddModal(true);
                                     }}
                                     title="Edit Profile"
-                                    className="p-1 text-neutral-500 hover:text-amber-600 transition"
+                                    className="p-1 text-neutral-600 hover:text-amber-600 transition font-bold"
                                   >
                                     ✏️
                                   </button>
@@ -1210,7 +1220,7 @@ export default function Dashboard() {
                                   <button
                                     onClick={() => setStudentToDelete({ student: st, sNo: idx + 1 })}
                                     title="Delete Student"
-                                    className="p-1 text-neutral-500 hover:text-red-600 transition"
+                                    className="p-1 text-neutral-600 hover:text-red-600 transition font-bold"
                                   >
                                     🗑️
                                   </button>
@@ -1244,7 +1254,7 @@ export default function Dashboard() {
                     </span>
                   </div>
                   <div className="text-[11px] text-neutral-500 font-medium hidden sm:block">
-                    Active sorted: Nearest/Overdue renewal first
+                    Tip: Row par click karke student profile dekhein
                   </div>
                 </div>
               </div>
@@ -1351,10 +1361,16 @@ export default function Dashboard() {
         </main>
       </div>
 
-      {/* ⚡ RENEWAL FORM MODAL */}
+      {/* ⚡ RENEWAL FORM MODAL (Click outside to close) */}
       {studentToRenew && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white border border-[#cad5e2] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden font-sans">
+        <div
+          onClick={() => setStudentToRenew(null)}
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white border border-[#cad5e2] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden font-sans"
+          >
             <div className="flex justify-between items-center px-5 py-3.5 border-b border-neutral-100 bg-[#f9fbff]">
               <div>
                 <h3 className="font-extrabold text-neutral-900 text-sm flex items-center gap-1.5">
@@ -1365,6 +1381,7 @@ export default function Dashboard() {
                 </p>
               </div>
               <button
+                type="button"
                 onClick={() => setStudentToRenew(null)}
                 className="w-6 h-6 rounded-full hover:bg-neutral-100 text-neutral-400 font-bold flex items-center justify-center text-xs transition"
               >
@@ -1490,15 +1507,22 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* 👁️ MODAL 1: ONLY STUDENT PERSONAL PROFILE */}
+      {/* 👁️ MODAL 1: STUDENT PROFILE (Click outside to close) */}
       {viewStudent && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white border border-[#cad5e2] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden font-sans">
+        <div
+          onClick={() => setViewStudent(null)}
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white border border-[#cad5e2] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden font-sans"
+          >
             <div className="flex justify-between items-center px-4 py-3 border-b border-neutral-100">
               <h3 className="font-extrabold text-neutral-800 text-xs flex items-center gap-1.5">
-                <span>👁️</span> Student Details Profile
+                <span>📋</span> Student Details Profile
               </h3>
               <button
+                type="button"
                 onClick={() => setViewStudent(null)}
                 className="w-6 h-6 rounded-full hover:bg-neutral-100 text-neutral-400 hover:text-neutral-700 font-bold flex items-center justify-center text-xs transition"
               >
@@ -1613,6 +1637,7 @@ export default function Dashboard() {
 
               <div className="pt-1 flex justify-end">
                 <button
+                  type="button"
                   onClick={() => {
                     const st = viewStudent;
                     setViewStudent(null);
@@ -1628,10 +1653,16 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* 🧾 MODAL 2: DEDICATED RECEIPTS LEDGER */}
+      {/* 🧾 MODAL 2: DEDICATED RECEIPTS LEDGER (Click outside to close) */}
       {viewHistoryStudent && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white border border-[#cad5e2] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden font-sans max-h-[90vh] flex flex-col">
+        <div
+          onClick={() => setViewHistoryStudent(null)}
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white border border-[#cad5e2] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden font-sans max-h-[90vh] flex flex-col"
+          >
             <div className="flex justify-between items-center px-4 py-3 border-b border-neutral-100 bg-[#f9fbff] flex-shrink-0">
               <div>
                 <h3 className="font-extrabold text-neutral-900 text-xs flex items-center gap-1.5">
@@ -1642,6 +1673,7 @@ export default function Dashboard() {
                 </p>
               </div>
               <button
+                type="button"
                 onClick={() => setViewHistoryStudent(null)}
                 className="w-6 h-6 rounded-full hover:bg-neutral-100 text-neutral-400 hover:text-neutral-700 font-bold flex items-center justify-center text-xs transition"
               >
@@ -1660,7 +1692,6 @@ export default function Dashboard() {
                 </span>
               </div>
 
-              {/* Receipts List */}
               <div className="space-y-2">
                 {historyStudentLogs.length === 0 ? (
                   <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-xl text-center text-neutral-500">
@@ -1717,10 +1748,16 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* 🗑️ DELETE CONFIRMATION POPUP MODAL */}
+      {/* 🗑️ DELETE CONFIRMATION POPUP (Click outside to close) */}
       {studentToDelete && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="bg-white border border-neutral-200 rounded-2xl w-full max-w-xs p-5 shadow-2xl text-center space-y-3.5 font-sans">
+        <div
+          onClick={() => setStudentToDelete(null)}
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-150"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white border border-neutral-200 rounded-2xl w-full max-w-xs p-5 shadow-2xl text-center space-y-3.5 font-sans"
+          >
             <div className="w-12 h-12 bg-red-50 text-red-600 border border-red-200 rounded-full flex items-center justify-center mx-auto text-xl shadow-sm">
               🗑️
             </div>
@@ -1750,10 +1787,19 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* NEW/EDIT STUDENT ADMISSION MODAL */}
+      {/* NEW/EDIT STUDENT ADMISSION MODAL (Click outside to close) */}
       {(showAddModal || editStudent) && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-neutral-200 rounded-2xl w-full max-w-xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+        <div
+          onClick={() => {
+            setShowAddModal(false);
+            setEditStudent(null);
+          }}
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white border border-neutral-200 rounded-2xl w-full max-w-xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+          >
             <div className="flex justify-between items-start border-b border-neutral-200 pb-3">
               <div>
                 <h3 className="font-bold text-neutral-900 text-base flex items-center gap-1.5">
@@ -1764,6 +1810,7 @@ export default function Dashboard() {
                 </p>
               </div>
               <button
+                type="button"
                 onClick={() => {
                   setShowAddModal(false);
                   setEditStudent(null);
