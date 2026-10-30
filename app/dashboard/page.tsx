@@ -347,6 +347,7 @@ export default function Dashboard() {
 
     const hasAdmissionLogged = rawLogs.some((h) => h.remarks?.toLowerCase().includes("admission"));
     const combined: RenewalLog[] = [...rawLogs];
+    
     if (!hasAdmissionLogged) {
       const originalFirstRenDate = calculateRenewalDateFromBase(st.admDate, st.plan || "1 Month");
       combined.push({
@@ -438,6 +439,7 @@ export default function Dashboard() {
         body: formBody.toString(),
       });
 
+      // Original admDate ko preserve rakhenge
       setStudents((prev) =>
         prev.map((s) =>
           s.rowIndex === studentToRenew.rowIndex
@@ -445,7 +447,6 @@ export default function Dashboard() {
                 ...s,
                 status: "Active",
                 plan: renewFormData.plan,
-                admDate: renewFormData.startDate,
                 renDate: renewFormData.newRenDate,
               }
             : s
@@ -1157,7 +1158,7 @@ export default function Dashboard() {
                                 </button>
                               </td>
 
-                              {/* ACTIONS: Eye button removed, clicks isolated */}
+                              {/* ACTIONS */}
                               <td className="py-3 px-4 text-center">
                                 <div
                                   className="flex items-center justify-center gap-1.5"
@@ -1699,7 +1700,7 @@ export default function Dashboard() {
                   </div>
                 ) : (
                   historyStudentLogs.map((log, lIdx) => {
-                    const isAdmission = log.remarks?.toLowerCase().includes("admission") || log.txId?.startsWith("INIT-");
+                    const isAdmission = log.remarks?.toLowerCase().includes("admission") || log.txId?.startsWith("INIT-") || log.txId?.startsWith("TX-ADM-");
                     const displayStart = formatDateToDDMMYYYY(log.oldRenDate);
                     const displayEnd = formatDateToDDMMYYYY(log.newRenDate);
 
