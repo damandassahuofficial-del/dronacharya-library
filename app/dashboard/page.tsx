@@ -345,9 +345,14 @@ export default function Dashboard() {
         (h.name && h.name.toUpperCase() === st.name.toUpperCase())
     );
 
-    const hasAdmissionLogged = rawLogs.some((h) => h.remarks?.toLowerCase().includes("admission"));
+    const hasAdmissionLogged = rawLogs.some(
+      (h) =>
+        h.remarks?.toLowerCase().includes("admission") ||
+        h.txId?.startsWith("INIT-") ||
+        h.txId?.startsWith("TX-ADM-")
+    );
+
     const combined: RenewalLog[] = [...rawLogs];
-    
     if (!hasAdmissionLogged) {
       const originalFirstRenDate = calculateRenewalDateFromBase(st.admDate, st.plan || "1 Month");
       combined.push({
@@ -386,6 +391,18 @@ export default function Dashboard() {
       endDate: formatDateToDDMMYYYY(st.renDate),
       plan: st.plan || "1 Month",
     };
+  };
+
+  // Check if a student has performed any renewals (excluding first admission)
+  const hasStudentRenewed = (st: Student): boolean => {
+    const logs = getCompiledHistoryForStudent(st);
+    const renewalEntries = logs.filter(
+      (log) =>
+        !log.remarks?.toLowerCase().includes("admission") &&
+        !log.txId?.startsWith("INIT-") &&
+        !log.txId?.startsWith("TX-ADM-")
+    );
+    return renewalEntries.length > 0;
   };
 
   const openRenewModal = (student: Student) => {
@@ -439,7 +456,7 @@ export default function Dashboard() {
         body: formBody.toString(),
       });
 
-      // Original admDate ko preserve rakhenge
+      // Preserve original admission date
       setStudents((prev) =>
         prev.map((s) =>
           s.rowIndex === studentToRenew.rowIndex
@@ -612,15 +629,35 @@ export default function Dashboard() {
     }
   };
 
+  // Counters
   const totalStudents = students.length;
   const activeStudents = students.filter((s) => s.status === "Active").length;
   const inactiveStudents = totalStudents - activeStudents;
+
+  // Active Reserved & Unreserved
+  const activeReservedStudents = students.filter(
+    (s) => s.status === "Active" && (s.studentType === "Reserved" || !s.studentType)
+  ).length;
+  const activeUnreservedStudents = students.filter(
+    (s) => s.status === "Active" && s.studentType === "Unreserved"
+  ).length;
+
+  // Active Renewed Students Count
+  const activeRenewedStudentsCount = students.filter(
+    (s) => s.status === "Active" && hasStudentRenewed(s)
+  ).length;
+
   const occupiedSeats = students.filter((s) => s.seatNo && s.seatNo !== "-" && s.status === "Active").length;
   const emptySeats = Math.max(0, TOTAL_SEATS - occupiedSeats);
 
   const allInitialAdmissionFees = students.reduce((acc, curr) => acc + (Number(curr.monthlyFee) || 0), 0);
   const allRenewalsFees = renewalHistory
-    .filter((h) => !h.remarks?.toLowerCase().includes("admission"))
+    .filter(
+      (h) =>
+        !h.remarks?.toLowerCase().includes("admission") &&
+        !h.txId?.startsWith("INIT-") &&
+        !h.txId?.startsWith("TX-ADM-")
+    )
     .reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
   const totalCombinedIncome = allInitialAdmissionFees + allRenewalsFees;
 
@@ -634,10 +671,20 @@ export default function Dashboard() {
         (s.fatherName || "").toLowerCase().includes(q) ||
         (s.course || "").toLowerCase().includes(q);
 
-      const matchesStatus =
-        statusFilter === "All Status" ? true : s.status.toLowerCase() === statusFilter.toLowerCase();
+      let matchesStatus = true;
+      if (statusFilter === "Active") matchesStatus = s.status === "Active";
+      else if (statusFilter === "Inactive") matchesStatus = s.status === "Inactive";
+      else if (statusFilter === "Active Reserved")
+        matchesStatus = s.status === "Active" && (s.studentType === "Reserved" || !s.studentType);
+      else if (statusFilter === "Active Unreserved")
+        matchesStatus = s.status === "Active" && s.studentType === "Unreserved";
+      else if (statusFilter === "Renewed (Active)")
+        matchesStatus = s.status === "Active" && hasStudentRenewed(s);
+
       const matchesPlan =
-        membershipFilter === "All Membership" ? true : (s.plan || "").toLowerCase().includes(membershipFilter.toLowerCase());
+        membershipFilter === "All Membership"
+          ? true
+          : (s.plan || "").toLowerCase().includes(membershipFilter.toLowerCase());
 
       return matchesSearch && matchesStatus && matchesPlan;
     })
@@ -809,7 +856,7 @@ export default function Dashboard() {
         </div>
       </aside>
 
-      {/* Vertical Continuous Top-to-Bottom Slider Strip Handle */}
+      {/* Continuous Slider Handle */}
       <div
         onClick={() => setIsSidebarOpen(!isSidebarOpen)}
         title={isSidebarOpen ? "Click to collapse sidebar" : "Click to expand sidebar"}
@@ -877,47 +924,105 @@ export default function Dashboard() {
           {activeMenu === "Dashboard" && (
             <div className="flex-1 overflow-y-auto space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                <div className="rounded-2xl p-5 text-white shadow-sm bg-gradient-to-br from-[#3b82f6] to-[#1d4ed8]">
-                  <p className="text-[11px] font-bold tracking-widest uppercase opacity-90">TOTAL STUDENTS</p>
-                  <p className="text-4xl font-black mt-2 tracking-tight">{totalStudents}</p>
-                  <div className="mt-3 pt-2.5 border-t border-white/20 flex items-center justify-between text-xs">
-                    <span>Active: <b>{activeStudents}</b></span>
-                    <span>Inactive: <b>{inactiveStudents}</b></span>
+                {/* 1. TOTAL STUDENTS CARD (Active/Inactive + Active Reserved/Unreserved nested) */}
+                <div className="rounded-2xl p-5 text-white shadow-sm bg-gradient-to-br from-[#2563eb] via-[#1d4ed8] to-[#1e40af] flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-[11px] font-bold tracking-widest uppercase opacity-90">TOTAL ENROLLED STUDENTS</p>
+                      <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-bold">ERP Live</span>
+                    </div>
+                    <p className="text-4xl font-black mt-2 tracking-tight">{totalStudents}</p>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-white/20 space-y-2">
+                    {/* Active vs Inactive */}
+                    <div className="flex items-center justify-between text-xs font-semibold">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-sm animate-pulse"></span>
+                        <span>Active Members: <b className="text-sm font-black text-white">{activeStudents}</b></span>
+                      </div>
+                      <div className="flex items-center gap-1.5 opacity-90">
+                        <span className="w-2 h-2 rounded-full bg-rose-300"></span>
+                        <span>Inactive: <b>{inactiveStudents}</b></span>
+                      </div>
+                    </div>
+
+                    {/* Active ke theek neeche Reserved & Unreserved Breakdown */}
+                    <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[11px] bg-black/15 px-3 py-1.5 rounded-xl">
+                      <span className="flex items-center gap-1.5 text-cyan-200 font-semibold">
+                        <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
+                        Reserved: <b className="text-white font-bold">{activeReservedStudents}</b>
+                      </span>
+                      <span className="text-white/40">•</span>
+                      <span className="flex items-center gap-1.5 text-blue-100 font-semibold">
+                        <span className="w-2 h-2 rounded-full bg-slate-200"></span>
+                        Unreserved: <b className="text-white font-bold">{activeUnreservedStudents}</b>
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="rounded-2xl p-5 text-white shadow-sm bg-gradient-to-br from-[#f97316] to-[#c2410c]">
-                  <p className="text-[11px] font-bold tracking-widest uppercase opacity-90">SEAT OCCUPANCY</p>
-                  <p className="text-4xl font-black mt-2 tracking-tight">
-                    {occupiedSeats} <span className="text-lg opacity-80">/ {TOTAL_SEATS}</span>
-                  </p>
-                  <div className="mt-3 pt-2.5 border-t border-white/20 flex items-center justify-between text-xs">
-                    <span>Empty Seats: <b>{emptySeats}</b></span>
-                    <span>{Math.round((occupiedSeats / TOTAL_SEATS) * 100)}% Full</span>
+                {/* 2. OCCUPANCY */}
+                <div className="rounded-2xl p-5 text-white shadow-sm bg-gradient-to-br from-[#ea580c] via-[#c2410c] to-[#9a3412] flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-[11px] font-bold tracking-widest uppercase opacity-90">SEAT OCCUPANCY</p>
+                      <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-bold">5 Rows</span>
+                    </div>
+                    <p className="text-4xl font-black mt-2 tracking-tight">
+                      {occupiedSeats} <span className="text-lg opacity-80 font-bold">/ {TOTAL_SEATS}</span>
+                    </p>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs font-semibold">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                      Empty Seats: <b>{emptySeats}</b>
+                    </span>
+                    <span className="bg-white/20 px-2.5 py-0.5 rounded-full font-black text-[11px]">
+                      {Math.round((occupiedSeats / TOTAL_SEATS) * 100)}% Full
+                    </span>
                   </div>
                 </div>
 
-                <div className="rounded-2xl p-5 text-white shadow-sm bg-gradient-to-br from-[#10b981] to-[#047857]">
-                  <p className="text-[11px] font-bold tracking-widest uppercase opacity-90">TOTAL COLLECTION (LEDGER)</p>
-                  <p className="text-4xl font-black mt-2 tracking-tight">₹{totalCombinedIncome.toLocaleString("en-IN")}</p>
-                  <div className="mt-3 pt-2.5 border-t border-white/20 flex items-center justify-between text-xs">
-                    <span>All Admissions + Renewals</span>
-                    <span>Lifetime Ledger</span>
+                {/* 3. TOTAL LEDGER COLLECTION */}
+                <div className="rounded-2xl p-5 text-white shadow-sm bg-gradient-to-br from-[#059669] via-[#047857] to-[#065f46] flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-[11px] font-bold tracking-widest uppercase opacity-90">TOTAL COLLECTION (LEDGER)</p>
+                      <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-bold">Lifetime</span>
+                    </div>
+                    <p className="text-4xl font-black mt-2 tracking-tight">₹{totalCombinedIncome.toLocaleString("en-IN")}</p>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs font-semibold">
+                    <span>Admissions + Renewals</span>
+                    <span className="bg-emerald-800/60 px-2 py-0.5 rounded text-[11px]">
+                      Active Renewed: <b>{activeRenewedStudentsCount}</b>
+                    </span>
                   </div>
                 </div>
               </div>
 
+              {/* Navigation Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
                 <div
                   onClick={() => setActiveMenu("Students")}
                   className="bg-[#faf8f4] border border-[#e3dccb] p-6 rounded-2xl cursor-pointer hover:border-amber-600 transition shadow-sm group"
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl p-3 bg-blue-100 rounded-xl">👥</span>
-                    <div>
-                      <h3 className="font-extrabold text-neutral-900 group-hover:text-blue-600 transition">Students Directory</h3>
-                      <p className="text-xs text-neutral-500 mt-0.5">Click here to manage all students, edit profiles, view admission details.</p>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3.5">
+                      <span className="text-2xl p-3 bg-blue-100 rounded-xl">👥</span>
+                      <div>
+                        <h3 className="font-extrabold text-neutral-900 group-hover:text-blue-600 transition text-sm">
+                          Students Directory
+                        </h3>
+                        <p className="text-xs text-neutral-500 mt-0.5">
+                          Manage all records, click rows for profiles, renew memberships.
+                        </p>
+                      </div>
                     </div>
+                    <span className="text-neutral-400 group-hover:translate-x-1 transition font-bold">➔</span>
                   </div>
                 </div>
 
@@ -925,12 +1030,19 @@ export default function Dashboard() {
                   onClick={() => setActiveMenu("Seats")}
                   className="bg-[#faf8f4] border border-[#e3dccb] p-6 rounded-2xl cursor-pointer hover:border-amber-600 transition shadow-sm group"
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl p-3 bg-emerald-100 rounded-xl">🪑</span>
-                    <div>
-                      <h3 className="font-extrabold text-neutral-900 group-hover:text-emerald-700 transition">Seat Allocation Matrix</h3>
-                      <p className="text-xs text-neutral-500 mt-0.5">Click here to view 5 Rows (82 Seats) interactive layout & assign seats.</p>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3.5">
+                      <span className="text-2xl p-3 bg-emerald-100 rounded-xl">🪑</span>
+                      <div>
+                        <h3 className="font-extrabold text-neutral-900 group-hover:text-emerald-700 transition text-sm">
+                          Seat Allocation Matrix
+                        </h3>
+                        <p className="text-xs text-neutral-500 mt-0.5">
+                          Interactive 5 Rows (82 Seats) layout with real-time seat assignment.
+                        </p>
+                      </div>
                     </div>
+                    <span className="text-neutral-400 group-hover:translate-x-1 transition font-bold">➔</span>
                   </div>
                 </div>
               </div>
@@ -940,8 +1052,8 @@ export default function Dashboard() {
           {activeMenu === "Students" && (
             <div className="flex-1 flex flex-col h-full overflow-hidden space-y-3">
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 flex-shrink-0">
-                <div className="flex flex-wrap items-center gap-2.5 flex-1">
-                  <div className="relative flex-1 min-w-[200px] max-w-sm">
+                <div className="flex flex-wrap items-center gap-2 flex-1">
+                  <div className="relative flex-1 min-w-[180px] max-w-xs">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 text-xs">🔍</span>
                     <input
                       type="text"
@@ -952,20 +1064,24 @@ export default function Dashboard() {
                     />
                   </div>
 
+                  {/* Enhanced Status Filter with Nested Categories & Renewal Filter */}
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="bg-[#faf8f4] border border-[#e3dccb] rounded-lg px-3 py-1.5 text-xs text-neutral-700 cursor-pointer"
+                    className="bg-[#faf8f4] border border-[#e3dccb] rounded-lg px-2.5 py-1.5 text-xs text-neutral-800 font-semibold cursor-pointer"
                   >
-                    <option>All Status</option>
-                    <option>Active</option>
-                    <option>Inactive</option>
+                    <option value="All Status">All Status ({totalStudents})</option>
+                    <option value="Active">Active Only ({activeStudents})</option>
+                    <option value="Active Reserved">↳ Active Reserved ({activeReservedStudents})</option>
+                    <option value="Active Unreserved">↳ Active Unreserved ({activeUnreservedStudents})</option>
+                    <option value="Renewed (Active)">⚡ Renewed Active Members ({activeRenewedStudentsCount})</option>
+                    <option value="Inactive">Inactive Members ({inactiveStudents})</option>
                   </select>
 
                   <select
                     value={membershipFilter}
                     onChange={(e) => setMembershipFilter(e.target.value)}
-                    className="bg-[#faf8f4] border border-[#e3dccb] rounded-lg px-3 py-1.5 text-xs text-neutral-700 cursor-pointer"
+                    className="bg-[#faf8f4] border border-[#e3dccb] rounded-lg px-2.5 py-1.5 text-xs text-neutral-700 cursor-pointer"
                   >
                     <option>All Membership</option>
                     <option>6hrs/Month</option>
@@ -975,18 +1091,36 @@ export default function Dashboard() {
                     <option>9 Month</option>
                   </select>
 
-                  <div className="hidden lg:flex items-center gap-3 text-[10px] font-bold px-3 py-1.5 bg-white/80 border border-[#e3dccb] rounded-lg shadow-sm">
-                    <span className="flex items-center gap-1.5 text-rose-800">
-                      <span className="w-2.5 h-2.5 rounded-full bg-rose-500 border border-rose-600"></span>
-                      Expired <b className="bg-rose-100 text-rose-900 px-1.5 py-0.2 rounded-full border border-rose-200">({expiredCount})</b>
+                  {/* Renewed Active Quick Badge Indicator */}
+                  <div
+                    onClick={() => setStatusFilter(statusFilter === "Renewed (Active)" ? "All Status" : "Renewed (Active)")}
+                    title="Click to toggle Renewed Active students filter"
+                    className={
+                      "hidden xl:flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-lg border transition cursor-pointer select-none " +
+                      (statusFilter === "Renewed (Active)"
+                        ? "bg-emerald-600 text-white border-emerald-700 shadow-sm"
+                        : "bg-emerald-50 text-emerald-900 border-emerald-300 hover:bg-emerald-100")
+                    }
+                  >
+                    <span>⚡ Renewed:</span>
+                    <b className="px-1.5 py-0.2 rounded-full bg-white/30 text-white font-black">
+                      {activeRenewedStudentsCount}
+                    </b>
+                  </div>
+
+                  {/* Due Alerts Indicators */}
+                  <div className="hidden lg:flex items-center gap-2.5 text-[10px] font-bold px-2.5 py-1 bg-white/80 border border-[#e3dccb] rounded-lg shadow-sm">
+                    <span className="flex items-center gap-1 text-rose-800">
+                      <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                      Expired <b>({expiredCount})</b>
                     </span>
-                    <span className="flex items-center gap-1.5 text-orange-800">
-                      <span className="w-2.5 h-2.5 rounded-full bg-orange-400 border border-orange-500"></span>
-                      Today Due <b className="bg-orange-100 text-orange-900 px-1.5 py-0.2 rounded-full border border-orange-200">({todayDueCount})</b>
+                    <span className="flex items-center gap-1 text-orange-800">
+                      <span className="w-2 h-2 rounded-full bg-orange-400"></span>
+                      Today Due <b>({todayDueCount})</b>
                     </span>
-                    <span className="flex items-center gap-1.5 text-amber-800">
-                      <span className="w-2.5 h-2.5 rounded-full bg-amber-300 border border-amber-400"></span>
-                      Due in ≤3 Days <b className="bg-amber-100 text-amber-900 px-1.5 py-0.2 rounded-full border border-amber-200">({due3DaysCount})</b>
+                    <span className="flex items-center gap-1 text-amber-800">
+                      <span className="w-2 h-2 rounded-full bg-amber-300"></span>
+                      Due ≤3 Days <b>({due3DaysCount})</b>
                     </span>
                   </div>
                 </div>
@@ -1001,12 +1135,13 @@ export default function Dashboard() {
                     a.download = "Dronacharya_Students.csv";
                     a.click();
                   }}
-                  className="bg-[#2e7d32] hover:bg-[#256828] text-white text-xs font-bold px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition flex-shrink-0"
+                  className="bg-[#2e7d32] hover:bg-[#256828] text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition flex-shrink-0"
                 >
                   📥 Export CSV
                 </button>
               </div>
 
+              {/* TABLE CONTAINER */}
               <div className="bg-[#faf8f4] border border-[#e3dccb] rounded-2xl overflow-hidden shadow-sm flex-1 flex flex-col relative">
                 <div
                   ref={tableContainerRef}
@@ -1036,13 +1171,14 @@ export default function Dashboard() {
                       ) : filteredStudents.length === 0 ? (
                         <tr>
                           <td colSpan={8} className="py-12 text-center text-neutral-500 font-medium">
-                            No students found. Click "+ Add Student" to create a record.
+                            No matching students found for selected filter.
                           </td>
                         </tr>
                       ) : (
                         filteredStudents.map((st, idx) => {
                           const activePeriod = getLatestActivePeriodForStudent(st);
                           const alertStatus = getRenewalAlertStatus(activePeriod.endDate, st.status);
+                          const isRenewedMember = st.status === "Active" && hasStudentRenewed(st);
 
                           let rowColorClass = "";
                           if (st.status !== "Active") {
@@ -1062,18 +1198,25 @@ export default function Dashboard() {
                               key={st.rowIndex || idx}
                               data-index={idx + 1}
                               onClick={() => setViewStudent(st)}
-                              title="Click row to view student profile"
+                              title="Click row to view full student profile"
                               className={"transition duration-150 cursor-pointer " + rowColorClass}
                             >
                               <td className="py-3 px-3 font-semibold text-neutral-500">{idx + 1}</td>
 
                               <td className="py-3 px-4 space-y-0.5">
-                                <p className="font-bold text-neutral-900 leading-tight">
-                                  {st.name}{" "}
-                                  <span className="text-neutral-500 font-medium text-xs uppercase">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <p className="font-bold text-neutral-900 leading-tight">
+                                    {st.name}
+                                  </p>
+                                  <span className="text-neutral-500 font-medium text-[10px] uppercase">
                                     ({st.gender || "MALE"})
                                   </span>
-                                </p>
+                                  {isRenewedMember && (
+                                    <span className="bg-emerald-100 text-emerald-800 text-[9px] font-black px-1.5 py-0.2 rounded border border-emerald-300">
+                                      ⚡ RENEWED
+                                    </span>
+                                  )}
+                                </div>
                                 <p className="text-[11px] text-neutral-600">F: {st.fatherName}</p>
                                 <span className="inline-block bg-[#e8f5e9] text-[#2e7d32] border border-[#c8e6c9] px-2 py-0.5 rounded text-[10px] font-semibold">
                                   📚 {st.course && st.course.trim() !== "" ? st.course : "Course Not Set"}
@@ -1084,7 +1227,7 @@ export default function Dashboard() {
                                 <p className="font-semibold text-neutral-900 text-xs">
                                   <span className="text-amber-700 mr-1">📞</span> {st.phone}
                                 </p>
-                                <p className="text-[11px] text-neutral-500">Alt: {st.altPhone}</p>
+                                <p className="text-[11px] text-neutral-500">Alt: {st.altPhone || "-"}</p>
                                 <p className="text-[11px] text-neutral-500 truncate max-w-xs">📍 {st.address}</p>
                               </td>
 
@@ -1131,12 +1274,12 @@ export default function Dashboard() {
                                 <span
                                   className={
                                     "px-2.5 py-1 rounded-md text-[10px] font-bold " +
-                                    (st.studentType === "Reserved"
-                                      ? "bg-[#e0f2fe] text-[#0369a1]"
-                                      : "bg-[#f1f5f9] text-[#475569]")
+                                    (st.studentType === "Reserved" || !st.studentType
+                                      ? "bg-[#e0f2fe] text-[#0369a1] border border-[#bae6fd]"
+                                      : "bg-[#f1f5f9] text-[#475569] border border-[#cbd5e1]")
                                   }
                                 >
-                                  {st.studentType}
+                                  {st.studentType || "Reserved"}
                                 </span>
                               </td>
 
@@ -1235,8 +1378,9 @@ export default function Dashboard() {
                   </table>
                 </div>
 
+                {/* Footer Count Bar */}
                 <div className="border-t border-[#e3dccb] bg-[#faf8f4] px-5 py-2.5 flex items-center justify-between text-xs text-neutral-700 font-semibold flex-shrink-0 z-10 shadow-[0_-3px_10px_rgba(0,0,0,0.04)] select-none">
-                  <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-2.5 flex-wrap">
                     <span>
                       Showing{" "}
                       <b className="text-neutral-900 bg-neutral-200 px-2 py-0.5 rounded text-[11px]">
@@ -1250,12 +1394,24 @@ export default function Dashboard() {
                       Active: <b>{displayActive}</b>
                     </span>
                     <span>•</span>
+                    <span className="text-blue-700">
+                      Reserved: <b>{activeReservedStudents}</b>
+                    </span>
+                    <span>•</span>
+                    <span className="text-slate-700">
+                      Unreserved: <b>{activeUnreservedStudents}</b>
+                    </span>
+                    <span>•</span>
+                    <span className="text-emerald-800">
+                      Renewed: <b>{activeRenewedStudentsCount}</b>
+                    </span>
+                    <span>•</span>
                     <span className="text-red-600">
                       Inactive: <b>{displayInactive}</b>
                     </span>
                   </div>
                   <div className="text-[11px] text-neutral-500 font-medium hidden sm:block">
-                    Tip: Row par click karke student profile dekhein
+                    Tip: Kisi bhi row par tap karke student profile dekhein
                   </div>
                 </div>
               </div>
@@ -1533,14 +1689,19 @@ export default function Dashboard() {
 
             <div className="p-4 space-y-3.5 text-[11px]">
               <div className="bg-[#f0f6ff] border border-[#d6e5fd] rounded-xl p-3">
-                <h4 className="font-extrabold text-blue-700 text-sm tracking-tight">
-                  ID: {viewStudent.studentId || "DL-01"} - {viewStudent.name} ({viewStudent.gender || "Male"})
-                </h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="font-extrabold text-blue-700 text-sm tracking-tight">
+                    ID: {viewStudent.studentId || "DL-01"} - {viewStudent.name}
+                  </h4>
+                  <span className="text-neutral-500 font-semibold text-[11px] uppercase">
+                    ({viewStudent.gender || "Male"})
+                  </span>
+                </div>
                 <p className="text-neutral-500 font-semibold text-[11px] mt-0.5">
                   Father Name: <span className="text-neutral-800">{viewStudent.fatherName}</span>
                 </p>
-                <p className="text-neutral-500 font-semibold text-[11px] mt-0.5">
-                  Status:{" "}
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-neutral-500 font-semibold text-[11px]">Status:</span>
                   <span
                     className={
                       viewStudent.status === "Active"
@@ -1550,7 +1711,12 @@ export default function Dashboard() {
                   >
                     {viewStudent.status}
                   </span>
-                </p>
+                  {hasStudentRenewed(viewStudent) && (
+                    <span className="bg-emerald-100 text-emerald-800 font-black text-[9px] px-2 py-0.2 rounded-full border border-emerald-300">
+                      ⚡ RENEWED MEMBER
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 px-1 text-neutral-700 font-medium">
@@ -1625,7 +1791,7 @@ export default function Dashboard() {
                     <span
                       className={
                         "px-2 py-0.5 rounded text-[10px] font-black " +
-                        (viewStudent.studentType === "Reserved"
+                        (viewStudent.studentType === "Reserved" || !viewStudent.studentType
                           ? "bg-blue-100 text-blue-800"
                           : "bg-neutral-200 text-neutral-700")
                       }
@@ -1654,7 +1820,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* 🧾 MODAL 2: DEDICATED RECEIPTS LEDGER (Click outside to close) */}
+      {/* 🧾 MODAL 2: RECEIPTS LEDGER (Click outside to close) */}
       {viewHistoryStudent && (
         <div
           onClick={() => setViewHistoryStudent(null)}
@@ -1700,7 +1866,10 @@ export default function Dashboard() {
                   </div>
                 ) : (
                   historyStudentLogs.map((log, lIdx) => {
-                    const isAdmission = log.remarks?.toLowerCase().includes("admission") || log.txId?.startsWith("INIT-") || log.txId?.startsWith("TX-ADM-");
+                    const isAdmission =
+                      log.remarks?.toLowerCase().includes("admission") ||
+                      log.txId?.startsWith("INIT-") ||
+                      log.txId?.startsWith("TX-ADM-");
                     const displayStart = formatDateToDDMMYYYY(log.oldRenDate);
                     const displayEnd = formatDateToDDMMYYYY(log.newRenDate);
 
@@ -1720,7 +1889,7 @@ export default function Dashboard() {
                                 "px-1.5 py-0.2 rounded text-[10px] font-bold " +
                                 (isAdmission
                                   ? "bg-blue-100 text-blue-800 border border-blue-200"
-                                  : "bg-neutral-100 text-neutral-800 border border-neutral-200")
+                                  : "bg-emerald-100 text-emerald-800 border border-emerald-200")
                               }
                             >
                               {log.plan}
