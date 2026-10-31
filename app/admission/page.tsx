@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState } from "react";
 
 const GOOGLE_SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbwRytE8gk3RWkY653YxcZ-pqKm7zLLosLdW4oyxNBbBzlPmHQhccyiAvWwbSnv8JLB-/exec";
@@ -19,76 +19,13 @@ export default function OfficialAdmissionDocument() {
     permAddress: "",
     pincode: "",
     idProof: "",
+    signatureName: "",
   });
 
   const [sameAddress, setSameAddress] = useState(false);
   const [agreed, setAgreed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-
-  // E-Signature Canvas State
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [hasSignature, setHasSignature] = useState(false);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.lineWidth = 2.2;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = "#0f172a";
-  }, []);
-
-  const getCoordinates = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
-    const rect = canvas.getBoundingClientRect();
-    const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
-    const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
-    return {
-      x: clientX - rect.left,
-      y: clientY - rect.top,
-    };
-  };
-
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const { x, y } = getCoordinates(e);
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    setIsDrawing(true);
-    setHasSignature(true);
-  };
-
-  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const { x, y } = getCoordinates(e);
-    ctx.lineTo(x, y);
-    ctx.stroke();
-  };
-
-  const stopDrawing = () => {
-    setIsDrawing(false);
-  };
-
-  const clearSignature = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    setHasSignature(false);
-  };
 
   const handleSameAddressToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
     const checked = e.target.checked;
@@ -104,8 +41,8 @@ export default function OfficialAdmissionDocument() {
       alert("कृपया नियम एवं शर्तों की घोषणा (Declaration) को स्वीकार करें।");
       return;
     }
-    if (!hasSignature) {
-      alert("कृपया नीचे बॉक्स में अपना डिजिटल हस्ताक्षर (Signature) बनाएं।");
+    if (!formData.signatureName.trim()) {
+      alert("कृपया नीचे बॉक्स में अपना डिजिटल हस्ताक्षर (Signature Name) टाइप करें।");
       return;
     }
 
@@ -131,6 +68,7 @@ export default function OfficialAdmissionDocument() {
       formBody.append("pincode", formData.pincode.trim());
       formBody.append("idProof", fullAadhaar);
       formBody.append("regDate", formData.regDate);
+      formBody.append("signature", formData.signatureName.trim());
 
       await fetch(GOOGLE_SCRIPT_URL, {
         method: "POST",
@@ -151,12 +89,12 @@ export default function OfficialAdmissionDocument() {
     return (
       <div className="min-h-screen bg-[#ece7de] flex items-center justify-center p-4 font-sans select-none">
         <div className="bg-[#fffefb] border-2 border-[#1e3a8a] rounded-2xl p-8 max-w-md w-full text-center shadow-2xl space-y-4">
-          <div className="w-16 h-16 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center text-3xl mx-auto shadow-inner font-black">
+          <div className="w-16 h-16 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center text-3xl mx-auto font-black shadow-inner">
             ✓
           </div>
-          <h2 className="text-2xl font-black text-[#1e3a8a] tracking-tight">आवेदन सफलतापूर्वक पंजीकृत हुआ!</h2>
+          <h2 className="text-2xl font-black text-[#1e3a8a] tracking-tight">आवेदन सफलतापूर्वक जमा हुआ!</h2>
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-950 font-semibold leading-relaxed">
-            आपका आवेदन द्रोणाचार्य लाइब्रेरी के केंद्रीय रिकॉर्ड में दर्ज हो चुका है। कृपया काउंटर डेस्क पर संपर्क करें ताकि आपकी अध्ययन सीट आवंटित कर आधिकारिक शुल्क रसीद जारी की जा सके।
+            आपका आवेदन द्रोणाचार्य लाइब्रेरी प्रबंधन को प्राप्त हो गया है। कृपया काउंटर डेस्क पर संपर्क करके अपनी सीट एवं रसीद प्राप्त करें।
           </div>
           <div className="pt-2 text-neutral-500 text-xs font-bold space-y-0.5">
             <p className="text-neutral-900 font-extrabold uppercase">द्रोणाचार्य लाइब्रेरी</p>
@@ -169,16 +107,21 @@ export default function OfficialAdmissionDocument() {
 
   return (
     <div className="min-h-screen bg-[#ece7de] py-6 px-3 sm:px-6 flex justify-center items-center font-sans antialiased text-neutral-900">
-      {/* Physical Document Outer Frame */}
       <div className="w-full max-w-[820px] bg-[#fffefb] border-[3px] border-[#1e3a8a] rounded-xl shadow-[0_12px_40px_rgba(0,0,0,0.18)] p-5 sm:p-9 relative">
         
-        {/* Top Header Section matching the Printed Form */}
+        {/* Top Header Section with Real Logo */}
         <div className="border-b-2 border-[#1e3a8a] pb-4 mb-5">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">
-              <div className="w-14 h-14 rounded-full border-2 border-[#1e3a8a] bg-blue-50 flex flex-col items-center justify-center shadow-sm">
-                <span className="text-2xl leading-none">🏹</span>
-                <span className="text-[7px] font-black uppercase tracking-tighter text-blue-900 mt-0.5">ESTD 2026</span>
+              <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-[#1e3a8a] shadow-sm flex-shrink-0 bg-white flex items-center justify-center">
+                <img
+                  src="/logo.png"
+                  alt="Dronacharya Library Logo"
+                  className="w-full h-full object-contain"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = "none";
+                  }}
+                />
               </div>
               <div>
                 <h1 className="text-3xl sm:text-4xl font-black text-[#1e3a8a] tracking-tight leading-none">
@@ -214,7 +157,7 @@ export default function OfficialAdmissionDocument() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6 text-xs">
-          {/* 👤 1. व्यक्तिगत जानकारी (PERSONAL INFORMATION) */}
+          {/* 1. व्यक्तिगत जानकारी */}
           <div className="border border-neutral-300 rounded-lg overflow-hidden bg-white shadow-sm">
             <div className="bg-[#1e3a8a] text-white px-3.5 py-1.5 flex items-center gap-2 font-black text-xs uppercase tracking-wide">
               <span>👤</span> व्यक्तिगत जानकारी (PERSONAL INFORMATION)
@@ -388,13 +331,14 @@ export default function OfficialAdmissionDocument() {
                   />
                 </div>
 
+                {/* Aadhaar Single Row Sequence */}
                 <div>
                   <label className="block font-black text-neutral-700 mb-1 uppercase text-[11px] flex justify-between">
                     <span>आधार नंबर (Aadhar No. - Last 4) *</span>
                     <span className="text-neutral-400 font-normal text-[10px]">XXXX-XXXX-LAST4</span>
                   </label>
-                  <div className="flex items-center h-[36px] border border-neutral-300 rounded-md overflow-hidden bg-[#fcfbf7]">
-                    <span className="bg-neutral-100 text-neutral-600 px-3 py-2 font-mono text-xs font-bold border-r border-neutral-300 select-none">
+                  <div className="flex items-center h-[38px] border border-neutral-300 rounded-md overflow-hidden bg-[#fcfbf7] w-full">
+                    <span className="bg-neutral-100 text-neutral-700 px-3 py-2 font-mono text-xs font-bold border-r border-neutral-300 whitespace-nowrap select-none">
                       XXXX-XXXX-
                     </span>
                     <input
@@ -404,7 +348,7 @@ export default function OfficialAdmissionDocument() {
                       placeholder="5678"
                       value={formData.idProof}
                       onChange={(e) => setFormData({ ...formData, idProof: e.target.value.replace(/\D/g, "").slice(0, 4) })}
-                      className="w-full bg-transparent px-3 py-1.5 font-mono text-xs font-bold tracking-widest text-neutral-900 focus:outline-none"
+                      className="w-full bg-transparent px-3 py-2 font-mono text-xs font-bold tracking-widest text-neutral-900 focus:outline-none"
                     />
                   </div>
                 </div>
@@ -412,7 +356,7 @@ export default function OfficialAdmissionDocument() {
             </div>
           </div>
 
-          {/* 📜 2. नियम एवं शर्तें (RULES & CONDITIONS) */}
+          {/* 2. नियम एवं शर्तें */}
           <div className="border border-neutral-300 rounded-lg overflow-hidden bg-white shadow-sm">
             <div className="bg-[#1e3a8a] text-white px-3.5 py-1.5 flex items-center gap-2 font-black text-xs uppercase tracking-wide">
               <span>📜</span> नियम एवं शर्तें (RULES & CONDITIONS)
@@ -434,7 +378,7 @@ export default function OfficialAdmissionDocument() {
             </div>
           </div>
 
-          {/* 🔔 3. महत्वपूर्ण निर्देश (IMPORTANT INSTRUCTIONS) */}
+          {/* 3. महत्वपूर्ण निर्देश */}
           <div className="border border-neutral-300 rounded-lg overflow-hidden bg-white shadow-sm">
             <div className="bg-slate-800 text-white px-3.5 py-1.5 flex items-center gap-2 font-black text-xs uppercase tracking-wide">
               <span>🔔</span> महत्वपूर्ण निर्देश (IMPORTANT INSTRUCTIONS)
@@ -456,13 +400,13 @@ export default function OfficialAdmissionDocument() {
             </div>
           </div>
 
-          {/* ✍️ 4. घोषणा एवं डिजिटल हस्ताक्षर (DECLARATION & SIGNATURE) */}
+          {/* 4. घोषणा एवं टाइप करने योग्य छात्र हस्ताक्षर */}
           <div className="border-2 border-neutral-400 rounded-lg p-4 bg-white space-y-4">
             <div>
               <h4 className="font-black text-xs uppercase text-neutral-900 mb-2 flex items-center gap-2">
                 <span>✅</span> घोषणा (DECLARATION)
               </h4>
-              <label className="flex items-start gap-2.5 cursor-pointer">
+              <label className="flex items-start gap-2.5 cursor-pointer p-2 rounded-lg hover:bg-blue-50/50 transition">
                 <input
                   type="checkbox"
                   required
@@ -476,56 +420,44 @@ export default function OfficialAdmissionDocument() {
               </label>
             </div>
 
-            {/* Signature Area */}
-            <div className="pt-3 border-t border-neutral-200 grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
-              <div className="border-t-2 border-dashed border-neutral-400 pt-2 text-center select-none opacity-70">
-                <p className="text-xs font-black text-neutral-800">Dronacharya Admin</p>
-                <p className="text-[10px] font-bold text-neutral-500 uppercase mt-0.5">Signature of Owner / Desk</p>
-              </div>
-
-              <div className="flex flex-col items-center">
-                <div className="w-full flex items-center justify-between mb-1">
-                  <span className="text-[10px] font-black uppercase text-blue-900">
-                    आवेदक का हस्ताक्षर (Sign Here) *
-                  </span>
-                  <button
-                    type="button"
-                    onClick={clearSignature}
-                    className="text-[10px] text-red-600 font-bold hover:underline"
-                  >
-                    Clear (हटाएं)
-                  </button>
-                </div>
-
-                <div className="w-full border-2 border-[#1e3a8a] rounded-lg bg-[#fafafd] overflow-hidden shadow-inner">
-                  <canvas
-                    ref={canvasRef}
-                    width={320}
-                    height={110}
-                    onMouseDown={startDrawing}
-                    onMouseMove={draw}
-                    onMouseUp={stopDrawing}
-                    onMouseLeave={stopDrawing}
-                    onTouchStart={startDrawing}
-                    onTouchMove={draw}
-                    onTouchEnd={stopDrawing}
-                    className="w-full h-[110px] cursor-crosshair touch-none"
-                  />
-                </div>
-                <p className="text-[9px] font-bold text-neutral-500 uppercase mt-1">
-                  Signature of Student
+            {/* Typeable Student Signature */}
+            <div className="pt-3 border-t border-neutral-200">
+              <div className="max-w-md mx-auto space-y-1.5">
+                <label className="block text-[11px] font-black uppercase text-[#1e3a8a] text-center">
+                  छात्र / छात्रा का डिजिटल हस्ताक्षर (TYPE FULL NAME TO SIGN) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="हस्ताक्षर के रूप में अपना पूरा नाम टाइप करें"
+                  value={formData.signatureName}
+                  onChange={(e) => setFormData({ ...formData, signatureName: e.target.value })}
+                  className="w-full bg-[#fafafd] border-2 border-[#1e3a8a] rounded-lg px-4 py-2 text-center text-sm font-serif italic font-bold tracking-wider text-blue-950 focus:outline-none focus:ring-2 focus:ring-blue-300 shadow-inner"
+                />
+                <p className="text-[10px] font-bold text-neutral-400 uppercase text-center">
+                  Signature of Student (Digitally Authenticated)
                 </p>
               </div>
             </div>
           </div>
 
+          {/* Submit Button */}
           <div className="pt-2">
             <button
               type="submit"
-              disabled={submitting}
-              className="w-full py-3.5 bg-[#1e3a8a] hover:bg-blue-900 text-white font-black text-sm rounded-xl shadow-lg transition duration-200 uppercase tracking-wider disabled:bg-neutral-400 cursor-pointer"
+              disabled={!agreed || submitting}
+              className={
+                "w-full py-3.5 text-white font-black text-sm rounded-xl shadow-lg transition duration-200 uppercase tracking-wider " +
+                (!agreed || submitting
+                  ? "bg-neutral-300 text-neutral-500 cursor-not-allowed shadow-none"
+                  : "bg-[#1e3a8a] hover:bg-blue-900 cursor-pointer active:scale-[0.99]")
+              }
             >
-              {submitting ? "पंजीकरण दर्ज हो रहा है..." : "आवेदन पत्र जमा करें (SUBMIT ADMISSION FORM)"}
+              {submitting
+                ? "पंजीकरण दर्ज हो रहा है..."
+                : !agreed
+                ? "पहले घोषणा (Declaration Checkbox) पर टिक करें"
+                : "आवेदन पत्र जमा करें (SUBMIT ADMISSION FORM)"}
             </button>
           </div>
         </form>

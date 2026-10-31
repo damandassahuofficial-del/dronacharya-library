@@ -306,12 +306,14 @@ export default function Dashboard() {
       setLoading(true);
       const res = await fetch(`${GOOGLE_SCRIPT_URL}?t=${Date.now()}`);
       const data = await res.json();
-      if (data && data.students) {
-        setStudents(data.students);
-        setRenewalHistory(data.history || []);
-        setPendingApplicants(data.pending || []);
-      } else if (Array.isArray(data)) {
+      
+      // Dono formats handle karega (direct array ya payload object)
+      if (Array.isArray(data)) {
         setStudents(data);
+      } else if (data && typeof data === "object") {
+        if (Array.isArray(data.students)) setStudents(data.students);
+        if (Array.isArray(data.history)) setRenewalHistory(data.history);
+        if (Array.isArray(data.pending)) setPendingApplicants(data.pending);
       }
     } catch (err) {
       console.error("Fetch error:", err);
