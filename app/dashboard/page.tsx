@@ -61,11 +61,29 @@ interface RenewalLog {
   remarks: string;
 }
 
+interface PendingApplicant {
+  pendingRowIndex: number;
+  date: string;
+  name: string;
+  fatherName: string;
+  gender: string;
+  dob: string;
+  phone: string;
+  altPhone: string;
+  course: string;
+  exam: string;
+  address: string;
+  pincode: string;
+  idProof: string;
+  status: string;
+}
+
 export default function Dashboard() {
-  const [activeMenu, setActiveMenu] = useState<"Dashboard" | "Students" | "Seats">("Dashboard");
+  const [activeMenu, setActiveMenu] = useState<"Dashboard" | "Students" | "Seats" | "Pending">("Dashboard");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [students, setStudents] = useState<Student[]>([]);
   const [renewalHistory, setRenewalHistory] = useState<RenewalLog[]>([]);
+  const [pendingApplicants, setPendingApplicants] = useState<PendingApplicant[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Status");
@@ -77,7 +95,23 @@ export default function Dashboard() {
   const [studentToRenew, setStudentToRenew] = useState<Student | null>(null);
   const [studentToDelete, setStudentToDelete] = useState<{ student: Student; sNo: number } | null>(null);
   const [editStudent, setEditStudent] = useState<Student | null>(null);
+  const [approvingApplicant, setApprovingApplicant] = useState<PendingApplicant | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Approval Modal Form Data
+  const [approvalFormData, setApprovalFormData] = useState({
+    plan: "1 Month",
+    monthlyFee: 1200,
+    payMode: "Cash",
+    selectedRow: "युधिष्ठिर",
+    selectedSeatNum: "",
+    seatNo: "युधिष्ठिर-1",
+    studentType: "Reserved",
+    admDate: new Date().toISOString().slice(0, 10),
+    renDate: "",
+    batch: "FULL DAY",
+    remarks: "QR Admission Approved",
+  });
 
   const [renewFormData, setRenewFormData] = useState<{
     plan: string;
@@ -275,6 +309,7 @@ export default function Dashboard() {
       if (data && data.students) {
         setStudents(data.students);
         setRenewalHistory(data.history || []);
+        setPendingApplicants(data.pending || []);
       } else if (Array.isArray(data)) {
         setStudents(data);
       }
@@ -289,6 +324,7 @@ export default function Dashboard() {
     const today = new Date().toISOString().slice(0, 10);
     const initialRen = calculateRenewalDateFromBase(today, "1 Month");
     setFormData((prev) => ({ ...prev, admDate: today, renDate: initialRen }));
+    setApprovalFormData((prev) => ({ ...prev, admDate: today, renDate: initialRen }));
     fetchStudents();
   }, []);
 
@@ -393,16 +429,14 @@ export default function Dashboard() {
     };
   };
 
-  // Check if a student has performed any renewals (excluding first admission)
   const hasStudentRenewed = (st: Student): boolean => {
     const logs = getCompiledHistoryForStudent(st);
-    const renewalEntries = logs.filter(
+    return logs.some(
       (log) =>
         !log.remarks?.toLowerCase().includes("admission") &&
         !log.txId?.startsWith("INIT-") &&
         !log.txId?.startsWith("TX-ADM-")
     );
-    return renewalEntries.length > 0;
   };
 
   const openRenewModal = (student: Student) => {
@@ -456,7 +490,6 @@ export default function Dashboard() {
         body: formBody.toString(),
       });
 
-      // Preserve original admission date
       setStudents((prev) =>
         prev.map((s) =>
           s.rowIndex === studentToRenew.rowIndex
@@ -490,6 +523,128 @@ export default function Dashboard() {
       setTimeout(() => fetchStudents(), 1800);
     } catch (err) {
       alert("Renewal save failed.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Open Approval Form for Pending Student
+  const openApprovalModal = (applicant: PendingApplicant) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const initialRen = calculateRenewalDateFromBase(today, "1 Month");
+    const freeSeats = getAvailableSeatsForRow("युधिष्ठिर");
+    const firstFree = freeSeats.length > 0 ? String(freeSeats[0]) : "1";
+
+    setApprovalFormData({
+      plan: "1 Month",
+      monthlyFee: 1200,
+      payMode: "Cash",
+      selectedRow: "युधिष्ठिर",
+      selectedSeatNum: firstFree,
+      seatNo: `युधिष्ठिर-${firstFree}`,
+      studentType: "Reserved",
+      admDate: today,
+      renDate: initialRen,
+      batch: "FULL DAY",
+      remarks: "Online QR Admission Approved",
+    });
+    setApprovingApplicant(applicant);
+  };
+
+  // Submit Approval and Generate Official Receipt
+  const handleConfirmApproval = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!approvingApplicant) return;
+
+    try {
+      setIsSubmitting(true);
+      const generatedId = `DL-${students.length < 9 ? "0" + (students.length + 1) : students.length + 1}`;
+
+      const payload: Record<string, any> = {
+        action: "approve_pending",
+        pendingRowIndex: approvingApplicant.pendingRowIndex,
+        studentId: generatedId,
+        name: approvingApplicant.name,
+        fatherName: approvingApplicant.fatherName,
+        gender: approvingApplicant.gender || "Male",
+        dob: approvingApplicant.dob,
+        phone: approvingApplicant.phone,
+        altPhone: approvingApplicant.altPhone,
+        address: approvingApplicant.address,
+        pincode: approvingApplicant.pincode,
+        idProof: approvingApplicant.idProof,
+        seatNo: approvalFormData.selectedRow === "None" ? "-" : approvalFormData.seatNo,
+        admDate: approvalFormData.admDate,
+        renDate: approvalFormData.renDate,
+        plan: approvalFormData.plan,
+        batch: approvalFormData.batch,
+        course: approvingApplicant.course || approvingApplicant.exam || "-",
+        monthlyFee: Number(approvalFormData.monthlyFee) || 0,
+        payMode: approvalFormData.payMode,
+        studentType: approvalFormData.studentType,
+        remarks: approvalFormData.remarks,
+      };
+
+      const formBody = new URLSearchParams();
+      for (const key in payload) {
+        formBody.append(key, String(payload[key] ?? ""));
+      }
+
+      await fetch(GOOGLE_SCRIPT_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: formBody.toString(),
+      });
+
+      // Add to local state
+      const newRec: Student = {
+        studentId: generatedId,
+        name: approvingApplicant.name,
+        fatherName: approvingApplicant.fatherName,
+        gender: approvingApplicant.gender || "Male",
+        dob: approvingApplicant.dob,
+        phone: approvingApplicant.phone,
+        altPhone: approvingApplicant.altPhone,
+        address: approvingApplicant.address,
+        pincode: approvingApplicant.pincode,
+        idProof: approvingApplicant.idProof,
+        seatNo: payload.seatNo,
+        admDate: approvalFormData.admDate,
+        renDate: approvalFormData.renDate,
+        plan: approvalFormData.plan,
+        batch: approvalFormData.batch,
+        course: payload.course,
+        monthlyFee: payload.monthlyFee,
+        status: "Active",
+        remarks: payload.remarks,
+        studentType: approvalFormData.studentType as any,
+        rowIndex: students.length + 2,
+      };
+
+      setStudents((prev) => [...prev, newRec]);
+      setPendingApplicants((prev) => prev.filter((p) => p.pendingRowIndex !== approvingApplicant.pendingRowIndex));
+      setRenewalHistory((prev) => [
+        {
+          txId: "TX-ADM-" + generatedId,
+          studentId: generatedId,
+          name: approvingApplicant.name,
+          plan: approvalFormData.plan,
+          amount: Number(approvalFormData.monthlyFee) || 0,
+          mode: approvalFormData.payMode,
+          payDate: formatDateToDDMMYYYY(approvalFormData.admDate),
+          oldRenDate: formatDateToDDMMYYYY(approvalFormData.admDate),
+          newRenDate: formatDateToDDMMYYYY(approvalFormData.renDate),
+          remarks: "First Admission Fee (Approved)",
+        },
+        ...prev,
+      ]);
+
+      setApprovingApplicant(null);
+      alert(`Student ${approvingApplicant.name} ko ID ${generatedId} ke sath safaltapoorvak approve kar diya gaya hai!`);
+      setTimeout(() => fetchStudents(), 1800);
+    } catch (err) {
+      alert("Approval save failed.");
     } finally {
       setIsSubmitting(false);
     }
@@ -544,7 +699,7 @@ export default function Dashboard() {
 
         setRenewalHistory((prev) => [
           {
-            txId: "TX-" + Date.now(),
+            txId: "TX-ADM-" + generatedId,
             studentId: generatedId,
             name: payload.name,
             plan: payload.plan || "1 Month",
@@ -629,12 +784,12 @@ export default function Dashboard() {
     }
   };
 
-  // Counters
+  // Metrics
   const totalStudents = students.length;
   const activeStudents = students.filter((s) => s.status === "Active").length;
   const inactiveStudents = totalStudents - activeStudents;
+  const pendingCount = pendingApplicants.length;
 
-  // Active Reserved & Unreserved
   const activeReservedStudents = students.filter(
     (s) => s.status === "Active" && (s.studentType === "Reserved" || !s.studentType)
   ).length;
@@ -642,7 +797,6 @@ export default function Dashboard() {
     (s) => s.status === "Active" && s.studentType === "Unreserved"
   ).length;
 
-  // Active Renewed Students Count
   const activeRenewedStudentsCount = students.filter(
     (s) => s.status === "Active" && hasStudentRenewed(s)
   ).length;
@@ -846,11 +1000,48 @@ export default function Dashboard() {
                 {emptySeats} Free
               </span>
             </button>
+
+            {/* NEW: Pending Admissions Sidebar Tab */}
+            <button
+              onClick={() => setActiveMenu("Pending")}
+              className={
+                "w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition " +
+                (activeMenu === "Pending"
+                  ? "bg-amber-200/90 text-amber-950 font-bold shadow-sm border border-amber-300"
+                  : "text-neutral-600 hover:bg-[#ede5d4]")
+              }
+            >
+              <div className="flex items-center gap-3">
+                <span>📝</span>
+                <span>Pending Approvals</span>
+              </div>
+              {pendingCount > 0 ? (
+                <span className="text-[10px] bg-amber-500 text-white px-2 py-0.5 rounded-full font-black animate-bounce shadow-sm">
+                  {pendingCount} New
+                </span>
+              ) : (
+                <span className="text-[10px] bg-neutral-200 text-neutral-500 px-2 py-0.5 rounded-full font-bold">
+                  0
+                </span>
+              )}
+            </button>
           </nav>
         </div>
 
-        <div className="w-64 p-3 border-t border-[#e3dccb]">
-          <Link className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-xl transition" href="/">
+        <div className="w-64 p-3 border-t border-[#e3dccb] space-y-2">
+          {/* Public QR Admission Page Link Button */}
+          <Link
+            href="/admission"
+            target="_blank"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-[11px] font-black text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-xl transition border border-blue-200"
+          >
+            <span>📱</span> Public Admission QR Form ↗
+          </Link>
+
+          <Link
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-xl transition"
+            href="/"
+          >
             <span>🚪</span> Logout
           </Link>
         </div>
@@ -877,13 +1068,15 @@ export default function Dashboard() {
               {isSidebarOpen ? "◀" : "▶"}
             </button>
             <span className="text-base">
-              {activeMenu === "Seats" ? "🪑" : activeMenu === "Students" ? "👥" : "📊"}
+              {activeMenu === "Seats" ? "🪑" : activeMenu === "Students" ? "👥" : activeMenu === "Pending" ? "📝" : "📊"}
             </span>
             <h2 className="font-extrabold text-neutral-800 text-sm tracking-tight">
               {activeMenu === "Seats"
                 ? "Seat Management Matrix"
                 : activeMenu === "Students"
                 ? "Students Directory"
+                : activeMenu === "Pending"
+                ? "Pending Public Applications"
                 : "Dashboard Overview"}
             </h2>
           </div>
@@ -907,7 +1100,7 @@ export default function Dashboard() {
               }}
               className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2 rounded-lg transition shadow flex items-center gap-1.5"
             >
-              <span>+</span> Add Student
+              <span>+</span> Direct Add
             </button>
             <button
               onClick={fetchStudents}
@@ -924,7 +1117,7 @@ export default function Dashboard() {
           {activeMenu === "Dashboard" && (
             <div className="flex-1 overflow-y-auto space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                {/* 1. TOTAL STUDENTS CARD (Active/Inactive + Active Reserved/Unreserved nested) */}
+                {/* 1. TOTAL STUDENTS */}
                 <div className="rounded-2xl p-5 text-white shadow-sm bg-gradient-to-br from-[#2563eb] via-[#1d4ed8] to-[#1e40af] flex flex-col justify-between">
                   <div>
                     <div className="flex items-center justify-between">
@@ -935,7 +1128,6 @@ export default function Dashboard() {
                   </div>
 
                   <div className="mt-4 pt-3 border-t border-white/20 space-y-2">
-                    {/* Active vs Inactive */}
                     <div className="flex items-center justify-between text-xs font-semibold">
                       <div className="flex items-center gap-1.5">
                         <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-sm animate-pulse"></span>
@@ -947,7 +1139,6 @@ export default function Dashboard() {
                       </div>
                     </div>
 
-                    {/* Active ke theek neeche Reserved & Unreserved Breakdown */}
                     <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[11px] bg-black/15 px-3 py-1.5 rounded-xl">
                       <span className="flex items-center gap-1.5 text-cyan-200 font-semibold">
                         <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
@@ -1005,7 +1196,27 @@ export default function Dashboard() {
               </div>
 
               {/* Navigation Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-2">
+                <div
+                  onClick={() => setActiveMenu("Pending")}
+                  className="bg-[#faf8f4] border-2 border-amber-400 p-6 rounded-2xl cursor-pointer hover:bg-amber-50/50 transition shadow-sm group relative overflow-hidden"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3.5">
+                      <span className="text-2xl p-3 bg-amber-100 rounded-xl">📝</span>
+                      <div>
+                        <h3 className="font-extrabold text-amber-950 group-hover:text-amber-700 transition text-sm">
+                          Pending Approvals ({pendingCount})
+                        </h3>
+                        <p className="text-xs text-neutral-500 mt-0.5">
+                          Review student QR submissions & generate admission receipts.
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-amber-600 font-black">➔</span>
+                  </div>
+                </div>
+
                 <div
                   onClick={() => setActiveMenu("Students")}
                   className="bg-[#faf8f4] border border-[#e3dccb] p-6 rounded-2xl cursor-pointer hover:border-amber-600 transition shadow-sm group"
@@ -1035,15 +1246,92 @@ export default function Dashboard() {
                       <span className="text-2xl p-3 bg-emerald-100 rounded-xl">🪑</span>
                       <div>
                         <h3 className="font-extrabold text-neutral-900 group-hover:text-emerald-700 transition text-sm">
-                          Seat Allocation Matrix
+                          Seat Matrix (5 Rows)
                         </h3>
                         <p className="text-xs text-neutral-500 mt-0.5">
-                          Interactive 5 Rows (82 Seats) layout with real-time seat assignment.
+                          Interactive 82 Cabin Seats layout with live seat assignment.
                         </p>
                       </div>
                     </div>
                     <span className="text-neutral-400 group-hover:translate-x-1 transition font-bold">➔</span>
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 📝 PENDING APPLICANTS REVIEW VIEW */}
+          {activeMenu === "Pending" && (
+            <div className="flex-1 flex flex-col h-full overflow-hidden space-y-3">
+              <div className="bg-[#faf8f4] border border-[#e3dccb] rounded-2xl p-4 flex items-center justify-between shadow-sm flex-shrink-0">
+                <div>
+                  <h3 className="text-sm font-black text-neutral-900">Online QR Admission Submissions</h3>
+                  <p className="text-xs text-neutral-500">
+                    Students who filled the public admission form via mobile QR scan.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-amber-900 bg-amber-100 border border-amber-300 px-3 py-1 rounded-lg">
+                    {pendingCount} Applications Awaiting Review
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-[#faf8f4] border border-[#e3dccb] rounded-2xl overflow-hidden shadow-sm flex-1 flex flex-col relative">
+                <div className="overflow-x-auto overflow-y-auto flex-1 w-full">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="sticky top-0 z-10 border-b border-[#e3dccb] text-neutral-500 font-bold uppercase tracking-wider text-[11px] bg-[#f5f1e8] shadow-sm select-none">
+                      <tr>
+                        <th className="py-3 px-3">#</th>
+                        <th className="py-3 px-4">APPLICANT DETAILS</th>
+                        <th className="py-3 px-4">CONTACT & ADDRESS</th>
+                        <th className="py-3 px-3">EXAM / COURSE</th>
+                        <th className="py-3 px-3">SUBMITTED ON</th>
+                        <th className="py-3 px-4 text-center">ACTION</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#e3dccb]/70 text-neutral-800">
+                      {pendingApplicants.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-16 text-center text-neutral-500 font-medium">
+                            🎉 Abhi koi pending application nahi hai. Sabhi forms approved hain!
+                          </td>
+                        </tr>
+                      ) : (
+                        pendingApplicants.map((app, idx) => (
+                          <tr key={app.pendingRowIndex || idx} className="hover:bg-[#f2ecde] transition">
+                            <td className="py-3 px-3 font-bold text-neutral-500">{idx + 1}</td>
+                            <td className="py-3 px-4 space-y-0.5">
+                              <p className="font-extrabold text-neutral-900 text-sm">{app.name}</p>
+                              <p className="text-[11px] text-neutral-600">Father: {app.fatherName}</p>
+                              <p className="text-[10px] text-neutral-500 font-mono">Aadhaar: {app.idProof}</p>
+                            </td>
+                            <td className="py-3 px-4 space-y-0.5">
+                              <p className="font-bold text-neutral-900">📞 {app.phone}</p>
+                              <p className="text-[11px] text-neutral-500">Alt: {app.altPhone || "-"}</p>
+                              <p className="text-[11px] text-neutral-500 truncate max-w-xs">{app.address}</p>
+                            </td>
+                            <td className="py-3 px-3">
+                              <span className="inline-block bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded text-[10px] font-bold">
+                                {app.course || app.exam || "General Study"}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 text-[11px] text-neutral-600 font-medium">
+                              {app.date ? String(app.date).slice(0, 10) : "Today"}
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <button
+                                onClick={() => openApprovalModal(app)}
+                                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-lg transition shadow flex items-center gap-1.5 mx-auto"
+                              >
+                                <span>⚡</span> Review & Approve
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
@@ -1064,7 +1352,6 @@ export default function Dashboard() {
                     />
                   </div>
 
-                  {/* Enhanced Status Filter with Nested Categories & Renewal Filter */}
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
@@ -1090,39 +1377,6 @@ export default function Dashboard() {
                     <option>6 Month</option>
                     <option>9 Month</option>
                   </select>
-
-                  {/* Renewed Active Quick Badge Indicator */}
-                  <div
-                    onClick={() => setStatusFilter(statusFilter === "Renewed (Active)" ? "All Status" : "Renewed (Active)")}
-                    title="Click to toggle Renewed Active students filter"
-                    className={
-                      "hidden xl:flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-lg border transition cursor-pointer select-none " +
-                      (statusFilter === "Renewed (Active)"
-                        ? "bg-emerald-600 text-white border-emerald-700 shadow-sm"
-                        : "bg-emerald-50 text-emerald-900 border-emerald-300 hover:bg-emerald-100")
-                    }
-                  >
-                    <span>⚡ Renewed:</span>
-                    <b className="px-1.5 py-0.2 rounded-full bg-white/30 text-white font-black">
-                      {activeRenewedStudentsCount}
-                    </b>
-                  </div>
-
-                  {/* Due Alerts Indicators */}
-                  <div className="hidden lg:flex items-center gap-2.5 text-[10px] font-bold px-2.5 py-1 bg-white/80 border border-[#e3dccb] rounded-lg shadow-sm">
-                    <span className="flex items-center gap-1 text-rose-800">
-                      <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-                      Expired <b>({expiredCount})</b>
-                    </span>
-                    <span className="flex items-center gap-1 text-orange-800">
-                      <span className="w-2 h-2 rounded-full bg-orange-400"></span>
-                      Today Due <b>({todayDueCount})</b>
-                    </span>
-                    <span className="flex items-center gap-1 text-amber-800">
-                      <span className="w-2 h-2 rounded-full bg-amber-300"></span>
-                      Due ≤3 Days <b>({due3DaysCount})</b>
-                    </span>
-                  </div>
                 </div>
 
                 <button
@@ -1378,7 +1632,6 @@ export default function Dashboard() {
                   </table>
                 </div>
 
-                {/* Footer Count Bar */}
                 <div className="border-t border-[#e3dccb] bg-[#faf8f4] px-5 py-2.5 flex items-center justify-between text-xs text-neutral-700 font-semibold flex-shrink-0 z-10 shadow-[0_-3px_10px_rgba(0,0,0,0.04)] select-none">
                   <div className="flex items-center gap-2.5 flex-wrap">
                     <span>
@@ -1390,28 +1643,13 @@ export default function Dashboard() {
                       <b className="text-neutral-900">{displayTotal}</b>
                     </span>
                     <span>•</span>
-                    <span className="text-emerald-700">
-                      Active: <b>{displayActive}</b>
-                    </span>
+                    <span className="text-emerald-700">Active: <b>{displayActive}</b></span>
                     <span>•</span>
-                    <span className="text-blue-700">
-                      Reserved: <b>{activeReservedStudents}</b>
-                    </span>
+                    <span className="text-blue-700">Reserved: <b>{activeReservedStudents}</b></span>
                     <span>•</span>
-                    <span className="text-slate-700">
-                      Unreserved: <b>{activeUnreservedStudents}</b>
-                    </span>
+                    <span className="text-slate-700">Unreserved: <b>{activeUnreservedStudents}</b></span>
                     <span>•</span>
-                    <span className="text-emerald-800">
-                      Renewed: <b>{activeRenewedStudentsCount}</b>
-                    </span>
-                    <span>•</span>
-                    <span className="text-red-600">
-                      Inactive: <b>{displayInactive}</b>
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-neutral-500 font-medium hidden sm:block">
-                    Tip: Kisi bhi row par tap karke student profile dekhein
+                    <span className="text-emerald-800">Renewed: <b>{activeRenewedStudentsCount}</b></span>
                   </div>
                 </div>
               </div>
@@ -1469,7 +1707,7 @@ export default function Dashboard() {
                       return (
                         <div
                           key={seat}
-                          title={isTaken ? `Click to view profile: ${student?.name} (${fullSeatName})` : `${fullSeatName} (Available)`}
+                          title={isTaken ? `Profile: ${student?.name} (${fullSeatName})` : `${fullSeatName} (Free)`}
                           onClick={() => {
                             if (isTaken && student) {
                               setViewStudent(student);
@@ -1518,123 +1756,176 @@ export default function Dashboard() {
         </main>
       </div>
 
-      {/* ⚡ RENEWAL FORM MODAL (Click outside to close) */}
-      {studentToRenew && (
+      {/* ⚡ NEW: APPROVAL & RECEIPT GENERATION MODAL */}
+      {approvingApplicant && (
         <div
-          onClick={() => setStudentToRenew(null)}
+          onClick={() => setApprovingApplicant(null)}
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white border border-[#cad5e2] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden font-sans"
+            className="bg-white border border-[#cad5e2] rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden font-sans max-h-[90vh] flex flex-col"
           >
-            <div className="flex justify-between items-center px-5 py-3.5 border-b border-neutral-100 bg-[#f9fbff]">
+            <div className="flex justify-between items-center px-5 py-3.5 border-b border-neutral-100 bg-emerald-50/50">
               <div>
                 <h3 className="font-extrabold text-neutral-900 text-sm flex items-center gap-1.5">
-                  <span className="text-emerald-600">⚡</span> Student Membership Renewal
+                  <span className="text-emerald-700">⚡</span> Approve Admission & Generate Official Receipt
                 </h3>
-                <p className="text-[11px] text-neutral-500 font-semibold mt-0.5">
-                  {studentToRenew.name} (ID: {studentToRenew.studentId || "DL-01"})
+                <p className="text-[11px] text-neutral-600 font-semibold mt-0.5">
+                  Applicant: <b>{approvingApplicant.name}</b> (Ph: {approvingApplicant.phone})
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => setStudentToRenew(null)}
+                onClick={() => setApprovingApplicant(null)}
                 className="w-6 h-6 rounded-full hover:bg-neutral-100 text-neutral-400 font-bold flex items-center justify-center text-xs transition"
               >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleConfirmRenew} className="p-5 space-y-3.5 text-xs">
-              <div>
-                <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">SELECT PLAN</label>
-                <select
-                  value={renewFormData.plan}
-                  onChange={(e) => {
-                    const selectedPlan = e.target.value;
-                    const fee = PLAN_FEE_RATES[selectedPlan] ?? 1200;
-                    const calculatedDate = calculateRenewalDateFromBase(renewFormData.startDate, selectedPlan);
-                    setRenewFormData((prev) => ({
-                      ...prev,
-                      plan: selectedPlan,
-                      feePaid: fee,
-                      newRenDate: calculatedDate,
-                    }));
-                  }}
-                  className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 font-bold focus:outline-none focus:border-blue-500 cursor-pointer"
-                >
-                  <option value="6hrs/Month">6hrs/Month</option>
-                  <option value="1 Month">1 Month</option>
-                  <option value="3 Month">3 Month</option>
-                  <option value="6 Month">6 Month</option>
-                  <option value="9 Month">9 Month</option>
-                </select>
-              </div>
-
+            <form onSubmit={handleConfirmApproval} className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
+              {/* Plan Selection */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">
-                    RENEWAL START DATE *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={renewFormData.startDate}
+                  <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">MEMBERSHIP PLAN *</label>
+                  <select
+                    value={approvalFormData.plan}
                     onChange={(e) => {
-                      const newStart = e.target.value;
-                      const calc = calculateRenewalDateFromBase(newStart, renewFormData.plan);
-                      setRenewFormData((prev) => ({
-                        ...prev,
-                        startDate: newStart,
-                        newRenDate: calc,
-                      }));
+                      const p = e.target.value;
+                      const fee = PLAN_FEE_RATES[p] ?? 1200;
+                      const calc = calculateRenewalDateFromBase(approvalFormData.admDate, p);
+                      setApprovalFormData({ ...approvalFormData, plan: p, monthlyFee: fee, renDate: calc });
                     }}
-                    className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-1.5 text-neutral-800 font-semibold focus:outline-none focus:border-blue-500"
-                  />
+                    className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-2 text-neutral-800 font-bold focus:outline-none focus:border-blue-500 cursor-pointer"
+                  >
+                    <option value="6hrs/Month">6hrs/Month</option>
+                    <option value="1 Month">1 Month</option>
+                    <option value="3 Month">3 Month</option>
+                    <option value="6 Month">6 Month</option>
+                    <option value="9 Month">9 Month</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">STUDENT TYPE</label>
+                  <select
+                    value={approvalFormData.studentType}
+                    onChange={(e) => setApprovalFormData({ ...approvalFormData, studentType: e.target.value })}
+                    className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-2 text-neutral-800 font-bold focus:outline-none focus:border-blue-500 cursor-pointer"
+                  >
+                    <option value="Reserved">Reserved Seat</option>
+                    <option value="Unreserved">Unreserved Shift</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Seat Allocation */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">SELECT CABIN ROW</label>
+                  <select
+                    value={approvalFormData.selectedRow}
+                    onChange={(e) => {
+                      const r = e.target.value;
+                      const free = getAvailableSeatsForRow(r);
+                      const fSeat = free.length > 0 ? String(free[0]) : "";
+                      setApprovalFormData({
+                        ...approvalFormData,
+                        selectedRow: r,
+                        selectedSeatNum: fSeat,
+                        seatNo: fSeat ? `${r}-${fSeat}` : "-",
+                      });
+                    }}
+                    className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-2 text-neutral-800 font-bold focus:outline-none focus:border-blue-500 cursor-pointer"
+                  >
+                    <option value="None">None / No Seat</option>
+                    {LIBRARY_SECTIONS.map((sec) => (
+                      <option key={sec.name} value={sec.name}>
+                        {sec.name} ({sec.count} Seats)
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
                   <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px] flex items-center justify-between">
+                    <span>SELECT FREE CABIN SEAT</span>
+                    <span className="text-emerald-700 text-[9px] font-bold">Free Cabins Only</span>
+                  </label>
+                  <select
+                    disabled={approvalFormData.selectedRow === "None"}
+                    value={approvalFormData.selectedSeatNum}
+                    onChange={(e) => {
+                      const sNum = e.target.value;
+                      setApprovalFormData({
+                        ...approvalFormData,
+                        selectedSeatNum: sNum,
+                        seatNo: sNum === "none" ? "-" : `${approvalFormData.selectedRow}-${sNum}`,
+                      });
+                    }}
+                    className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-2 text-neutral-800 font-bold focus:outline-none focus:border-blue-500 cursor-pointer disabled:bg-neutral-100"
+                  >
+                    {getAvailableSeatsForRow(approvalFormData.selectedRow).map((n) => (
+                      <option key={n} value={n}>
+                        Seat #{n}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Dates */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">ADMISSION DATE *</label>
+                  <input
+                    type="date"
+                    required
+                    value={approvalFormData.admDate}
+                    onChange={(e) => {
+                      const d = e.target.value;
+                      const calc = calculateRenewalDateFromBase(d, approvalFormData.plan);
+                      setApprovalFormData({ ...approvalFormData, admDate: d, renDate: calc });
+                    }}
+                    className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-1.5 text-neutral-800 font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px] flex justify-between">
                     <span>NEXT RENEWAL DATE *</span>
-                    <span className="text-emerald-600 text-[9px] font-semibold">Auto-calculated</span>
+                    <span className="text-emerald-700 text-[9px] font-bold">Auto-calculated</span>
                   </label>
                   <input
                     type="date"
                     required
-                    value={renewFormData.newRenDate}
-                    onChange={(e) => setRenewFormData({ ...renewFormData, newRenDate: e.target.value })}
-                    className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-1.5 text-neutral-800 focus:outline-none focus:border-blue-500 font-medium"
+                    value={approvalFormData.renDate}
+                    onChange={(e) => setApprovalFormData({ ...approvalFormData, renDate: e.target.value })}
+                    className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-1.5 text-neutral-800 font-bold"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Payment Details */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-[#f8fbff] p-3 rounded-xl border border-blue-100">
                 <div>
-                  <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px] flex items-center justify-between">
-                    <span>FEE AMOUNT (₹) *</span>
-                    <span className="text-neutral-400 text-[9px] font-normal">Editable</span>
-                  </label>
+                  <label className="block text-neutral-700 font-bold mb-1 uppercase text-[10px]">FEE AMOUNT (₹) *</label>
                   <input
                     type="number"
-                    placeholder="e.g. 1200"
-                    value={renewFormData.feePaid === "" ? "" : renewFormData.feePaid}
-                    onChange={(e) =>
-                      setRenewFormData({
-                        ...renewFormData,
-                        feePaid: e.target.value === "" ? "" : Number(e.target.value),
-                      })
-                    }
-                    className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 font-bold text-sm focus:outline-none focus:border-blue-500"
+                    required
+                    value={approvalFormData.monthlyFee}
+                    onChange={(e) => setApprovalFormData({ ...approvalFormData, monthlyFee: Number(e.target.value) })}
+                    className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-neutral-900 font-black text-sm"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">PAYMENT MODE</label>
+                  <label className="block text-neutral-700 font-bold mb-1 uppercase text-[10px]">PAYMENT MODE</label>
                   <select
-                    value={renewFormData.payMode}
-                    onChange={(e) => setRenewFormData({ ...renewFormData, payMode: e.target.value })}
-                    className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 font-bold focus:outline-none focus:border-blue-500 cursor-pointer"
+                    value={approvalFormData.payMode}
+                    onChange={(e) => setApprovalFormData({ ...approvalFormData, payMode: e.target.value })}
+                    className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-neutral-800 font-bold focus:outline-none cursor-pointer"
                   >
                     <option value="Cash">Cash</option>
                     <option value="UPI / QR">UPI / QR</option>
@@ -1643,20 +1934,20 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <div className="pt-2 flex justify-end gap-2.5 border-t border-neutral-100">
+              <div className="pt-2 flex justify-end gap-2.5 border-t border-neutral-200">
                 <button
                   type="button"
-                  onClick={() => setStudentToRenew(null)}
-                  className="px-4 py-2 border border-neutral-300 rounded-lg text-neutral-700 hover:bg-neutral-100 font-bold transition"
+                  onClick={() => setApprovingApplicant(null)}
+                  className="px-4 py-2 border border-neutral-300 rounded-lg text-neutral-700 font-bold"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold shadow-md shadow-emerald-600/20 transition"
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-black shadow-md shadow-emerald-600/20"
                 >
-                  {isSubmitting ? "Recording..." : "Confirm & Save"}
+                  {isSubmitting ? "Generating Receipt..." : "✓ Approve & Issue Receipt"}
                 </button>
               </div>
             </form>
@@ -1664,7 +1955,96 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* 👁️ MODAL 1: STUDENT PROFILE (Click outside to close) */}
+      {/* RENEWAL MODAL */}
+      {studentToRenew && (
+        <div
+          onClick={() => setStudentToRenew(null)}
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white border border-[#cad5e2] rounded-2xl w-full max-w-md shadow-2xl p-5 space-y-4"
+          >
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-extrabold text-neutral-900 text-sm">⚡ Student Membership Renewal</h3>
+              <button onClick={() => setStudentToRenew(null)} className="text-neutral-400 font-bold text-xs">✕</button>
+            </div>
+            <form onSubmit={handleConfirmRenew} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-[10px] font-bold text-neutral-600 uppercase mb-1">Select Plan</label>
+                <select
+                  value={renewFormData.plan}
+                  onChange={(e) => {
+                    const p = e.target.value;
+                    const fee = PLAN_FEE_RATES[p] ?? 1200;
+                    setRenewFormData({ ...renewFormData, plan: p, feePaid: fee, newRenDate: calculateRenewalDateFromBase(renewFormData.startDate, p) });
+                  }}
+                  className="w-full bg-neutral-50 border p-2 rounded-lg font-bold"
+                >
+                  <option value="6hrs/Month">6hrs/Month</option>
+                  <option value="1 Month">1 Month</option>
+                  <option value="3 Month">3 Month</option>
+                  <option value="6 Month">6 Month</option>
+                  <option value="9 Month">9 Month</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-neutral-600 uppercase mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={renewFormData.startDate}
+                    onChange={(e) => setRenewFormData({ ...renewFormData, startDate: e.target.value, newRenDate: calculateRenewalDateFromBase(e.target.value, renewFormData.plan) })}
+                    className="w-full bg-neutral-50 border p-1.5 rounded-lg font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-neutral-600 uppercase mb-1">New Renewal Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={renewFormData.newRenDate}
+                    onChange={(e) => setRenewFormData({ ...renewFormData, newRenDate: e.target.value })}
+                    className="w-full bg-neutral-50 border p-1.5 rounded-lg font-bold"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-neutral-600 uppercase mb-1">Fee Amount (₹)</label>
+                  <input
+                    type="number"
+                    value={renewFormData.feePaid}
+                    onChange={(e) => setRenewFormData({ ...renewFormData, feePaid: e.target.value })}
+                    className="w-full bg-neutral-50 border p-2 rounded-lg font-black text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-neutral-600 uppercase mb-1">Payment Mode</label>
+                  <select
+                    value={renewFormData.payMode}
+                    onChange={(e) => setRenewFormData({ ...renewFormData, payMode: e.target.value })}
+                    className="w-full bg-neutral-50 border p-2 rounded-lg font-bold"
+                  >
+                    <option value="Cash">Cash</option>
+                    <option value="UPI / QR">UPI / QR</option>
+                    <option value="Bank Transfer">Bank Transfer</option>
+                  </select>
+                </div>
+              </div>
+              <div className="pt-2 flex justify-end gap-2 border-t">
+                <button type="button" onClick={() => setStudentToRenew(null)} className="px-4 py-2 border rounded-lg font-bold">Cancel</button>
+                <button type="submit" disabled={isSubmitting} className="px-5 py-2 bg-emerald-600 text-white rounded-lg font-black">
+                  {isSubmitting ? "Saving..." : "Confirm & Save"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* STUDENT PROFILE MODAL */}
       {viewStudent && (
         <div
           onClick={() => setViewStudent(null)}
@@ -1672,292 +2052,89 @@ export default function Dashboard() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white border border-[#cad5e2] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden font-sans"
+            className="bg-white border border-[#cad5e2] rounded-2xl w-full max-w-md shadow-2xl p-5 space-y-3.5 text-[11px]"
           >
-            <div className="flex justify-between items-center px-4 py-3 border-b border-neutral-100">
-              <h3 className="font-extrabold text-neutral-800 text-xs flex items-center gap-1.5">
-                <span>📋</span> Student Details Profile
-              </h3>
-              <button
-                type="button"
-                onClick={() => setViewStudent(null)}
-                className="w-6 h-6 rounded-full hover:bg-neutral-100 text-neutral-400 hover:text-neutral-700 font-bold flex items-center justify-center text-xs transition"
-              >
-                ✕
-              </button>
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="font-extrabold text-xs">📋 Student Details Profile</h3>
+              <button onClick={() => setViewStudent(null)} className="font-bold text-xs text-neutral-400">✕</button>
             </div>
-
-            <div className="p-4 space-y-3.5 text-[11px]">
-              <div className="bg-[#f0f6ff] border border-[#d6e5fd] rounded-xl p-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-extrabold text-blue-700 text-sm tracking-tight">
-                    ID: {viewStudent.studentId || "DL-01"} - {viewStudent.name}
-                  </h4>
-                  <span className="text-neutral-500 font-semibold text-[11px] uppercase">
-                    ({viewStudent.gender || "Male"})
-                  </span>
-                </div>
-                <p className="text-neutral-500 font-semibold text-[11px] mt-0.5">
-                  Father Name: <span className="text-neutral-800">{viewStudent.fatherName}</span>
-                </p>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-neutral-500 font-semibold text-[11px]">Status:</span>
-                  <span
-                    className={
-                      viewStudent.status === "Active"
-                        ? "font-black uppercase text-emerald-700"
-                        : "font-black uppercase text-red-600"
-                    }
-                  >
-                    {viewStudent.status}
-                  </span>
-                  {hasStudentRenewed(viewStudent) && (
-                    <span className="bg-emerald-100 text-emerald-800 font-black text-[9px] px-2 py-0.2 rounded-full border border-emerald-300">
-                      ⚡ RENEWED MEMBER
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 px-1 text-neutral-700 font-medium">
-                <div>
-                  <p className="flex items-center gap-1.5">
-                    <span>📞</span> <b>Mobile:</b> {viewStudent.phone}
-                  </p>
-                </div>
-                <div>
-                  <p className="flex items-center gap-1.5">
-                    <span>📞</span> <b>Alt Mobile:</b> {viewStudent.altPhone || "-"}
-                  </p>
-                </div>
-                <div>
-                  <p className="flex items-center gap-1.5">
-                    <span>🪪</span> <b>Aadhaar:</b> {viewStudent.idProof || "-"}
-                  </p>
-                </div>
-                <div>
-                  <p className="flex items-center gap-1.5">
-                    <span>📍</span> <b>Pincode:</b> {viewStudent.pincode || "-"}
-                  </p>
-                </div>
-                <div>
-                  <p className="flex items-center gap-1.5">
-                    <span>🎂</span> <b>DOB:</b> {formatDateToDDMMYYYY(viewStudent.dob || "")}
-                  </p>
-                </div>
-                <div className="col-span-2 pt-0.5">
-                  <p className="flex items-start gap-1.5 leading-relaxed">
-                    <span className="flex-shrink-0 mt-0.5">🏡</span>
-                    <span>
-                      <b>Address:</b>{" "}
-                      <span className="text-neutral-800 font-normal break-words">
-                        {viewStudent.address || "-"}
-                      </span>
-                    </span>
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-[#f2faf5] border border-[#d2eedf] rounded-xl p-3 text-neutral-800 space-y-1.5">
-                <div className="grid grid-cols-2 gap-2 font-medium">
-                  <p className="flex items-center gap-1.5">
-                    <span>💺</span> <b>Current Seat:</b>{" "}
-                    <span className="font-extrabold text-blue-700">{viewStudent.seatNo}</span>
-                  </p>
-                  <p className="flex items-center gap-1.5">
-                    <span>⏳</span> <b>Active Plan:</b> {viewStudent.plan}
-                  </p>
-                  <p className="flex items-center gap-1.5">
-                    <span>📅</span> <b>Admission:</b>{" "}
-                    <span className="font-extrabold text-emerald-700">
-                      {formatDateToDDMMYYYY(viewStudent.admDate)}
-                    </span>
-                  </p>
-                  <p className="flex items-center gap-1.5">
-                    <span>🗓️</span> <b>Renewal Date:</b>{" "}
-                    <span className="font-extrabold text-red-600">
-                      {formatDateToDDMMYYYY(getLatestActivePeriodForStudent(viewStudent).endDate)}
-                    </span>
-                  </p>
-                </div>
-
-                <div className="pt-1.5 border-t border-[#d2eedf]/70 flex items-center justify-between font-medium">
-                  <p className="flex items-center gap-1.5">
-                    <span>📚</span> <b>Course:</b>{" "}
-                    <span className="font-bold text-neutral-900">{viewStudent.course || "-"}</span>
-                  </p>
-                  <p className="flex items-center gap-1.5">
-                    <span>🏷️</span> <b>Type:</b>{" "}
-                    <span
-                      className={
-                        "px-2 py-0.5 rounded text-[10px] font-black " +
-                        (viewStudent.studentType === "Reserved" || !viewStudent.studentType
-                          ? "bg-blue-100 text-blue-800"
-                          : "bg-neutral-200 text-neutral-700")
-                      }
-                    >
-                      {viewStudent.studentType || "Reserved"}
-                    </span>
-                  </p>
-                </div>
-              </div>
-
-              <div className="pt-1 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const st = viewStudent;
-                    setViewStudent(null);
-                    setViewHistoryStudent(st);
-                  }}
-                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 shadow-sm transition"
-                >
-                  <span>🧾</span> View Payment Receipts
-                </button>
-              </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+              <h4 className="font-black text-blue-900 text-sm">
+                ID: {viewStudent.studentId || "DL-01"} - {viewStudent.name} ({viewStudent.gender || "MALE"})
+              </h4>
+              <p className="text-neutral-600 font-bold mt-0.5">Father: {viewStudent.fatherName}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-neutral-700 font-medium">
+              <p>📞 <b>Mobile:</b> {viewStudent.phone}</p>
+              <p>📞 <b>Alt:</b> {viewStudent.altPhone || "-"}</p>
+              <p>🪪 <b>Aadhaar:</b> {viewStudent.idProof || "-"}</p>
+              <p>🎂 <b>DOB:</b> {formatDateToDDMMYYYY(viewStudent.dob || "")}</p>
+              <p className="col-span-2">📍 <b>Address:</b> {viewStudent.address}</p>
+            </div>
+            <div className="bg-[#f2faf5] border border-[#d2eedf] rounded-xl p-3 grid grid-cols-2 gap-2 font-medium">
+              <p>💺 <b>Seat:</b> <span className="font-black text-blue-700">{viewStudent.seatNo}</span></p>
+              <p>⏳ <b>Plan:</b> {viewStudent.plan}</p>
+              <p>📅 <b>Admission:</b> {formatDateToDDMMYYYY(viewStudent.admDate)}</p>
+              <p>🗓️ <b>Renewal:</b> <span className="font-black text-red-600">{formatDateToDDMMYYYY(getLatestActivePeriodForStudent(viewStudent).endDate)}</span></p>
+            </div>
+            <div className="pt-2 flex justify-end">
+              <button
+                onClick={() => {
+                  const s = viewStudent;
+                  setViewStudent(null);
+                  setViewHistoryStudent(s);
+                }}
+                className="px-3.5 py-1.5 bg-emerald-600 text-white font-bold rounded-lg"
+              >
+                🧾 View Receipts
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 🧾 MODAL 2: RECEIPTS LEDGER (Click outside to close) */}
+      {/* RECEIPTS LEDGER MODAL */}
       {viewHistoryStudent && (
         <div
           onClick={() => setViewHistoryStudent(null)}
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white border border-[#cad5e2] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden font-sans max-h-[90vh] flex flex-col"
+            className="bg-white border rounded-2xl w-full max-w-md shadow-2xl p-5 space-y-3 max-h-[85vh] flex flex-col"
           >
-            <div className="flex justify-between items-center px-4 py-3 border-b border-neutral-100 bg-[#f9fbff] flex-shrink-0">
+            <div className="flex justify-between items-center border-b pb-2 flex-shrink-0">
+              <h3 className="font-extrabold text-xs">🧾 Receipts Ledger: {viewHistoryStudent.name}</h3>
+              <button onClick={() => setViewHistoryStudent(null)} className="font-bold text-xs">✕</button>
+            </div>
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex justify-between items-center flex-shrink-0">
               <div>
-                <h3 className="font-extrabold text-neutral-900 text-xs flex items-center gap-1.5">
-                  <span className="text-emerald-700 text-sm">🧾</span> Fee & Renewal Receipts Ledger
-                </h3>
-                <p className="text-[11px] text-neutral-500 font-semibold mt-0.5">
-                  {viewHistoryStudent.name} (ID: {viewHistoryStudent.studentId || "DL-01"})
-                </p>
+                <p className="text-[10px] uppercase font-bold text-emerald-800">TOTAL PAID</p>
+                <p className="text-xl font-black text-emerald-700">₹{totalPaidByHistoryStudent}</p>
               </div>
-              <button
-                type="button"
-                onClick={() => setViewHistoryStudent(null)}
-                className="w-6 h-6 rounded-full hover:bg-neutral-100 text-neutral-400 hover:text-neutral-700 font-bold flex items-center justify-center text-xs transition"
-              >
-                ✕
-              </button>
+              <span className="text-xs bg-emerald-200 px-2.5 py-1 rounded-full font-bold">{historyStudentLogs.length} Receipts</span>
             </div>
-
-            <div className="p-4 space-y-3.5 text-[11px] overflow-y-auto flex-1">
-              <div className="bg-[#f0fdf4] border border-[#bbf7d0] rounded-xl p-3 flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] text-emerald-800 font-bold uppercase tracking-wider">TOTAL PAID TILL DATE</p>
-                  <p className="text-xl font-black text-emerald-700 mt-0.5">₹{totalPaidByHistoryStudent}</p>
-                </div>
-                <span className="text-[10px] bg-emerald-100 text-emerald-900 font-extrabold px-2.5 py-1 rounded-full border border-emerald-300">
-                  {historyStudentLogs.length} Receipts
-                </span>
-              </div>
-
-              <div className="space-y-2">
-                {historyStudentLogs.length === 0 ? (
-                  <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-xl text-center text-neutral-500">
-                    No payment receipts found.
+            <div className="overflow-y-auto space-y-2 flex-1 text-xs">
+              {historyStudentLogs.map((log, i) => (
+                <div key={log.txId || i} className="p-3 border rounded-xl flex justify-between items-center bg-white shadow-sm">
+                  <div>
+                    <span className="font-black text-emerald-700 text-sm mr-2">₹{log.amount}</span>
+                    <span className="text-[10px] bg-neutral-100 px-1.5 py-0.5 rounded font-bold mr-2">{log.plan}</span>
+                    <span className="text-[10px] text-neutral-400">({log.mode})</span>
+                    <p className="text-[11px] text-neutral-500 mt-1">{formatDateToDDMMYYYY(log.oldRenDate)} - {formatDateToDDMMYYYY(log.newRenDate)}</p>
                   </div>
-                ) : (
-                  historyStudentLogs.map((log, lIdx) => {
-                    const isAdmission =
-                      log.remarks?.toLowerCase().includes("admission") ||
-                      log.txId?.startsWith("INIT-") ||
-                      log.txId?.startsWith("TX-ADM-");
-                    const displayStart = formatDateToDDMMYYYY(log.oldRenDate);
-                    const displayEnd = formatDateToDDMMYYYY(log.newRenDate);
-
-                    return (
-                      <div
-                        key={log.txId || lIdx}
-                        className={
-                          "p-3 rounded-xl border transition flex items-center justify-between " +
-                          (isAdmission ? "bg-[#f8fbff] border-blue-200" : "bg-white border-neutral-200 shadow-sm")
-                        }
-                      >
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-black text-emerald-700 text-sm">₹{log.amount}</span>
-                            <span
-                              className={
-                                "px-1.5 py-0.2 rounded text-[10px] font-bold " +
-                                (isAdmission
-                                  ? "bg-blue-100 text-blue-800 border border-blue-200"
-                                  : "bg-emerald-100 text-emerald-800 border border-emerald-200")
-                              }
-                            >
-                              {log.plan}
-                            </span>
-                            <span className="text-neutral-400 font-normal">({log.mode})</span>
-                          </div>
-
-                          <p className="text-[11px] text-neutral-600 font-medium">
-                            {displayStart} - {displayEnd}
-                          </p>
-                        </div>
-
-                        <div className="text-right">
-                          <p className="text-[9px] text-neutral-400 uppercase font-bold tracking-wider">PAID DATE</p>
-                          <p className="text-[11px] text-neutral-900 font-extrabold mt-0.5">
-                            {formatDateToDDMMYYYY(log.payDate)}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
+                  <div className="text-right">
+                    <p className="text-[9px] text-neutral-400 font-bold uppercase">PAID DATE</p>
+                    <p className="text-[11px] font-black">{formatDateToDDMMYYYY(log.payDate)}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       )}
 
-      {/* 🗑️ DELETE CONFIRMATION POPUP (Click outside to close) */}
-      {studentToDelete && (
-        <div
-          onClick={() => setStudentToDelete(null)}
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-150"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="bg-white border border-neutral-200 rounded-2xl w-full max-w-xs p-5 shadow-2xl text-center space-y-3.5 font-sans"
-          >
-            <div className="w-12 h-12 bg-red-50 text-red-600 border border-red-200 rounded-full flex items-center justify-center mx-auto text-xl shadow-sm">
-              🗑️
-            </div>
-            <div>
-              <h3 className="font-black text-neutral-900 text-sm">Delete Student Record?</h3>
-              <p className="text-xs text-neutral-500 mt-1 leading-relaxed">
-                Kya aap student <b>{studentToDelete.student.name}</b> (ID: {studentToDelete.student.studentId || `DL-${studentToDelete.sNo}`}) ko permanently delete karna chahte hain?
-              </p>
-            </div>
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                type="button"
-                onClick={executeDelete}
-                className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition shadow-sm"
-              >
-                Yes, Delete
-              </button>
-              <button
-                type="button"
-                onClick={() => setStudentToDelete(null)}
-                className="flex-1 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-xs font-bold transition"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* NEW/EDIT STUDENT ADMISSION MODAL (Click outside to close) */}
+      {/* DIRECT ADD / EDIT MODAL */}
       {(showAddModal || editStudent) && (
         <div
           onClick={() => {
@@ -1968,356 +2145,145 @@ export default function Dashboard() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white border border-neutral-200 rounded-2xl w-full max-w-xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+            className="bg-white border rounded-2xl w-full max-w-xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
           >
-            <div className="flex justify-between items-start border-b border-neutral-200 pb-3">
-              <div>
-                <h3 className="font-bold text-neutral-900 text-base flex items-center gap-1.5">
-                  <span className="text-neutral-700 text-lg">+</span> {editStudent ? "Edit Student Details" : "New Student Admission"}
-                </h3>
-                <p className="text-xs text-neutral-500 mt-0.5">
-                  Enter details to enroll or update a library member
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAddModal(false);
-                  setEditStudent(null);
-                }}
-                className="w-6 h-6 rounded-full bg-neutral-100 hover:bg-neutral-200 flex items-center justify-center text-neutral-500 font-bold text-xs transition"
-              >
-                ✕
-              </button>
+            <div className="flex justify-between items-start border-b pb-3">
+              <h3 className="font-bold text-neutral-900 text-base">
+                {editStudent ? "Edit Student Details" : "New Student Admission"}
+              </h3>
+              <button onClick={() => { setShowAddModal(false); setEditStudent(null); }} className="font-bold text-xs">✕</button>
             </div>
-
             <form onSubmit={handleSaveStudent} className="space-y-4 text-xs">
-              <div className="space-y-2.5">
-                <p className="text-[11px] font-bold text-blue-600 flex items-center gap-1 tracking-wider uppercase">
-                  <span>👤</span> BASIC DETAILS
-                </p>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">STUDENT NAME *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="FULL NAME"
-                      value={formData.name || ""}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })}
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 uppercase focus:outline-none focus:border-blue-500 font-semibold"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">FATHER'S NAME *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="FATHER'S NAME"
-                      value={formData.fatherName || ""}
-                      onChange={(e) => setFormData({ ...formData, fatherName: e.target.value.toUpperCase() })}
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 uppercase focus:outline-none focus:border-blue-500 font-semibold"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
-                  <div>
-                    <label className="block text-neutral-600 font-bold mb-1.5 uppercase text-[10px]">GENDER</label>
-                    <div className="flex items-center gap-4 text-neutral-700 font-semibold pt-1">
-                      {["Male", "Female", "Other"].map((g) => (
-                        <label key={g} className="flex items-center gap-1.5 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="gender"
-                            value={g}
-                            checked={formData.gender === g}
-                            onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                            className="accent-blue-600"
-                          />
-                          <span>{g}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">DATE OF BIRTH</label>
-                    <input
-                      type="date"
-                      value={formData.dob || ""}
-                      onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-1.5 text-neutral-700 focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-2.5 pt-2 border-t border-neutral-100">
-                <p className="text-[11px] font-bold text-blue-600 flex items-center gap-1 tracking-wider uppercase">
-                  <span>📞</span> CONTACT & ADDRESS
-                </p>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">MOBILE (WHATSAPP) *</label>
-                    <input
-                      type="tel"
-                      required
-                      placeholder="10 DIGIT MOBILE NO."
-                      value={formData.phone || ""}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">PARENTS / ALT CONTACT *</label>
-                    <input
-                      type="tel"
-                      placeholder="10 DIGIT CONTACT NO."
-                      value={formData.altPhone || ""}
-                      onChange={(e) => setFormData({ ...formData, altPhone: e.target.value })}
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-                </div>
-
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">ADDRESS</label>
+                  <label className="block font-bold text-neutral-600 mb-1 uppercase text-[10px]">Student Name *</label>
                   <input
                     type="text"
-                    placeholder="HOUSE NO, AREA, CITY"
-                    value={formData.address || ""}
-                    onChange={(e) => setFormData({ ...formData, address: e.target.value.toUpperCase() })}
-                    className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 uppercase focus:outline-none focus:border-blue-500 font-semibold"
+                    required
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })}
+                    className="w-full bg-neutral-50 border p-2 rounded-lg font-bold"
                   />
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">PINCODE *</label>
-                    <input
-                      type="text"
-                      placeholder="6 DIGIT PINCODE"
-                      value={formData.pincode || ""}
-                      onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px] flex items-center justify-between">
-                      <span>AADHAAR NO. (LAST 4 DIGITS) *</span>
-                      <span className="text-neutral-400 font-normal text-[9px]">Saves as XXXX-XXXX-LAST4</span>
-                    </label>
-                    <div className="flex items-center h-[38px] border border-neutral-200 rounded-lg overflow-hidden bg-neutral-50 focus-within:border-blue-500">
-                      <span className="bg-neutral-100 text-neutral-500 px-3 py-2 font-mono text-xs border-r border-neutral-200 whitespace-nowrap select-none font-bold">
-                        XXXX-XXXX-
-                      </span>
-                      <input
-                        type="text"
-                        maxLength={4}
-                        placeholder="1234"
-                        value={formData.idProof ? formData.idProof.replace(/\D/g, "").slice(-4) : ""}
-                        onChange={(e) => setFormData({ ...formData, idProof: e.target.value.replace(/\D/g, "").slice(0, 4) })}
-                        className="w-full bg-transparent px-3 py-2 text-neutral-800 font-mono tracking-widest text-xs focus:outline-none"
-                      />
-                    </div>
-                  </div>
+                <div>
+                  <label className="block font-bold text-neutral-600 mb-1 uppercase text-[10px]">Father's Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.fatherName}
+                    onChange={(e) => setFormData({ ...formData, fatherName: e.target.value.toUpperCase() })}
+                    className="w-full bg-neutral-50 border p-2 rounded-lg font-bold"
+                  />
                 </div>
               </div>
-
-              <div className="space-y-2.5 pt-2 border-t border-neutral-100">
-                <p className="text-[11px] font-bold text-blue-600 flex items-center gap-1 tracking-wider uppercase">
-                  <span>📚</span> LIBRARY MEMBERSHIP
-                </p>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">STATUS</label>
-                    <select
-                      value={formData.status || "Active"}
-                      onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 font-bold focus:outline-none focus:border-blue-500 cursor-pointer"
-                    >
-                      <option value="Active">Active</option>
-                      <option value="Inactive">Inactive</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">STATUS TYPE</label>
-                    <select
-                      value={formData.studentType || "Reserved"}
-                      onChange={(e) => setFormData({ ...formData, studentType: e.target.value as any })}
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 font-semibold focus:outline-none focus:border-blue-500 cursor-pointer"
-                    >
-                      <option value="Reserved">Reserved</option>
-                      <option value="Unreserved">Unreserved</option>
-                    </select>
-                  </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-neutral-600 mb-1 uppercase text-[10px]">Mobile *</label>
+                  <input
+                    type="tel"
+                    required
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    className="w-full bg-neutral-50 border p-2 rounded-lg"
+                  />
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">ADMISSION DATE *</label>
-                    <input
-                      type="date"
-                      required
-                      value={formData.admDate || ""}
-                      onChange={(e) => {
-                        const ren = calculateRenewalDateFromBase(e.target.value, formData.plan);
-                        setFormData({ ...formData, admDate: e.target.value, renDate: ren });
-                      }}
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-1.5 text-neutral-800 focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px] flex items-center justify-between">
-                      <span>RENEWAL DATE *</span>
-                      <span className="text-emerald-600 text-[9px] font-semibold">Auto-calculated</span>
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      value={formData.renDate || ""}
-                      onChange={(e) => setFormData({ ...formData, renDate: e.target.value })}
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-1.5 text-neutral-800 focus:outline-none focus:border-blue-500 font-medium"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">PLAN DURATION</label>
-                    <select
-                      value={formData.plan || "1 Month"}
-                      onChange={(e) => {
-                        const plan = e.target.value;
-                        const ren = calculateRenewalDateFromBase(formData.admDate, plan);
-                        const autoFee = PLAN_FEE_RATES[plan] ?? 1200;
-                        setFormData({ ...formData, plan, renDate: ren, monthlyFee: autoFee });
-                      }}
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 font-semibold focus:outline-none focus:border-blue-500 cursor-pointer"
-                    >
-                      <option value="6hrs/Month">6hrs/Month</option>
-                      <option value="1 Month">1 Month</option>
-                      <option value="3 Month">3 Month</option>
-                      <option value="6 Month">6 Month</option>
-                      <option value="9 Month">9 Month</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px] flex items-center justify-between">
-                      <span>FEE AMOUNT (₹) *</span>
-                      <span className="text-neutral-400 text-[9px] font-normal">Editable</span>
-                    </label>
-                    <input
-                      type="number"
-                      placeholder="e.g. 1200"
-                      value={formData.monthlyFee === "" ? "" : formData.monthlyFee}
-                      onChange={(e) => setFormData({ ...formData, monthlyFee: e.target.value === "" ? "" : Number(e.target.value) })}
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 font-bold text-sm focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">SELECT ROW</label>
-                    <select
-                      value={formData.selectedRow || "None"}
-                      onChange={(e) => handleRowChange(e.target.value)}
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 font-bold focus:outline-none focus:border-blue-500 cursor-pointer"
-                    >
-                      <option value="None">None / No Seat (Seat nahi dena)</option>
-                      {LIBRARY_SECTIONS.map((sec) => (
-                        <option key={sec.name} value={sec.name}>
-                          {sec.name} ({sec.count} Seats)
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px] flex items-center justify-between">
-                      <span>SELECT AVAILABLE SEAT</span>
-                      <span className="text-emerald-600 text-[9px] font-bold">Only Free Seats</span>
-                    </label>
-                    <select
-                      disabled={formData.selectedRow === "None"}
-                      value={formData.selectedSeatNum || ""}
-                      onChange={(e) => handleSeatNumChange(e.target.value)}
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 font-bold focus:outline-none focus:border-blue-500 cursor-pointer disabled:bg-neutral-100 disabled:text-neutral-400"
-                    >
-                      {formData.selectedRow === "None" ? (
-                        <option value="">No Seat Allotted (-)</option>
-                      ) : getAvailableSeatsForRow(formData.selectedRow || "", editStudent?.seatNo).length === 0 ? (
-                        <option value="">No Free Seats in this Row</option>
-                      ) : (
-                        <>
-                          <option value="none">No Seat (-)</option>
-                          {getAvailableSeatsForRow(formData.selectedRow || "", editStudent?.seatNo).map((num) => (
-                            <option key={num} value={num}>
-                              Seat #{num}
-                            </option>
-                          ))}
-                        </>
-                      )}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">BATCH / SHIFT</label>
-                    <input
-                      type="text"
-                      placeholder="E.G. MORNING (6 AM - 2 PM), FULL DAY"
-                      value={formData.batch || ""}
-                      onChange={(e) => setFormData({ ...formData, batch: e.target.value.toUpperCase() })}
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 uppercase focus:outline-none focus:border-blue-500 placeholder:text-neutral-400 font-normal"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">COURSE / TARGET EXAM</label>
-                    <input
-                      type="text"
-                      placeholder="TARGET EXAM (E.G. UPSC, SSC, GATE, NEET)"
-                      value={formData.course || ""}
-                      onChange={(e) => setFormData({ ...formData, course: e.target.value.toUpperCase() })}
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 uppercase focus:outline-none focus:border-blue-500 placeholder:text-neutral-400 font-normal"
-                    />
-                  </div>
+                <div>
+                  <label className="block font-bold text-neutral-600 mb-1 uppercase text-[10px]">Alt Contact *</label>
+                  <input
+                    type="tel"
+                    value={formData.altPhone}
+                    onChange={(e) => setFormData({ ...formData, altPhone: e.target.value })}
+                    className="w-full bg-neutral-50 border p-2 rounded-lg"
+                  />
                 </div>
               </div>
-
-              <div className="pt-3 border-t border-neutral-200 flex justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAddModal(false);
-                    setEditStudent(null);
-                  }}
-                  className="px-4 py-2 border border-neutral-300 rounded-lg text-neutral-700 hover:bg-neutral-100 font-bold transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2 rounded-lg transition shadow-md shadow-blue-500/20"
-                >
-                  {isSubmitting ? "Saving..." : editStudent ? "Update & Save" : "Confirm & Save"}
+              <div>
+                <label className="block font-bold text-neutral-600 mb-1 uppercase text-[10px]">Address</label>
+                <input
+                  type="text"
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value.toUpperCase() })}
+                  className="w-full bg-neutral-50 border p-2 rounded-lg"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-neutral-600 mb-1 uppercase text-[10px]">Admission Date *</label>
+                  <input
+                    type="date"
+                    required
+                    value={formData.admDate}
+                    onChange={(e) => setFormData({ ...formData, admDate: e.target.value, renDate: calculateRenewalDateFromBase(e.target.value, formData.plan) })}
+                    className="w-full bg-neutral-50 border p-1.5 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-neutral-600 mb-1 uppercase text-[10px]">Renewal Date *</label>
+                  <input
+                    type="date"
+                    required
+                    value={formData.renDate}
+                    onChange={(e) => setFormData({ ...formData, renDate: e.target.value })}
+                    className="w-full bg-neutral-50 border p-1.5 rounded-lg"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-neutral-600 mb-1 uppercase text-[10px]">Select Row</label>
+                  <select
+                    value={formData.selectedRow}
+                    onChange={(e) => handleRowChange(e.target.value)}
+                    className="w-full bg-neutral-50 border p-2 rounded-lg font-bold"
+                  >
+                    <option value="None">None / No Seat</option>
+                    {LIBRARY_SECTIONS.map((sec) => (
+                      <option key={sec.name} value={sec.name}>{sec.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-neutral-600 mb-1 uppercase text-[10px]">Seat Number</label>
+                  <select
+                    disabled={formData.selectedRow === "None"}
+                    value={formData.selectedSeatNum}
+                    onChange={(e) => handleSeatNumChange(e.target.value)}
+                    className="w-full bg-neutral-50 border p-2 rounded-lg font-bold disabled:bg-neutral-100"
+                  >
+                    {getAvailableSeatsForRow(formData.selectedRow || "", editStudent?.seatNo).map((num) => (
+                      <option key={num} value={num}>Seat #{num}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="pt-3 border-t flex justify-end gap-2.5">
+                <button type="button" onClick={() => { setShowAddModal(false); setEditStudent(null); }} className="px-4 py-2 border rounded-lg font-bold">Cancel</button>
+                <button type="submit" disabled={isSubmitting} className="px-5 py-2 bg-blue-600 text-white rounded-lg font-bold">
+                  {isSubmitting ? "Saving..." : "Confirm & Save"}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE MODAL */}
+      {studentToDelete && (
+        <div
+          onClick={() => setStudentToDelete(null)}
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white border rounded-2xl w-full max-w-xs p-5 shadow-2xl text-center space-y-3"
+          >
+            <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto text-xl font-bold">🗑️</div>
+            <h3 className="font-black text-sm">Delete Student Record?</h3>
+            <p className="text-xs text-neutral-500">Permanently delete <b>{studentToDelete.student.name}</b>?</p>
+            <div className="flex gap-2 pt-1">
+              <button onClick={executeDelete} className="flex-1 py-2 bg-red-600 text-white rounded-lg font-bold text-xs">Yes, Delete</button>
+              <button onClick={() => setStudentToDelete(null)} className="flex-1 py-2 bg-neutral-100 rounded-lg font-bold text-xs">Cancel</button>
+            </div>
           </div>
         </div>
       )}
