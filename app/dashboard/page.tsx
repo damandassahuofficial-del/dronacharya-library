@@ -159,19 +159,25 @@ export default function Dashboard() {
   };
   const [formData, setFormData] = useState<Student>(initialForm);
 
+  // Clean date helper - Removes any time or timestamp string strictly
   const formatDateToDDMMYYYY = (dateStr: string): string => {
     if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return "-";
-    const s = String(dateStr).trim();
+    // Strip time part (T..., GMT..., spaces)
+    let s = String(dateStr).trim().split("T")[0].split(" ")[0];
 
     if (s.includes("/")) {
       const parts = s.split("/");
       if (parts.length === 3) {
-        return `${parts[0].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[2].slice(0, 4)}`;
+        if (parts[2].length === 4) {
+          return `${parts[0].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[2]}`;
+        } else if (parts[0].length === 4) {
+          return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`;
+        }
       }
     }
 
     if (s.includes("-")) {
-      const parts = s.split("T")[0].split("-");
+      const parts = s.split("-");
       if (parts.length === 3) {
         if (parts[0].length === 4) {
           return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`;
@@ -185,17 +191,19 @@ export default function Dashboard() {
 
   const formatToInputDate = (dateStr: string): string => {
     if (!dateStr || dateStr === "-") return "";
-    const s = String(dateStr).trim();
+    let s = String(dateStr).trim().split("T")[0].split(" ")[0];
     if (s.includes("/")) {
       const parts = s.split("/");
       if (parts.length === 3) {
-        return `${parts[2].slice(0, 4)}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+        if (parts[2].length === 4) {
+          return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+        }
       }
     }
     if (s.includes("-")) {
-      const parts = s.split("T")[0].split("-");
+      const parts = s.split("-");
       if (parts.length === 3) {
-        if (parts[0].length === 4) return s.split("T")[0];
+        if (parts[0].length === 4) return s;
         return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
       }
     }
@@ -204,11 +212,11 @@ export default function Dashboard() {
 
   const calculateRenewalDateFromBase = (baseDateStr: string, planStr: string): string => {
     if (!baseDateStr || baseDateStr === "-") return "";
-    const s = String(baseDateStr).trim();
+    let s = String(baseDateStr).trim().split("T")[0].split(" ")[0];
 
     let y = 0, m = 0, d = 0;
     if (s.includes("-")) {
-      const parts = s.split("T")[0].split("-");
+      const parts = s.split("-");
       if (parts[0].length === 4) {
         y = parseInt(parts[0], 10);
         m = parseInt(parts[1], 10);
@@ -254,17 +262,17 @@ export default function Dashboard() {
 
   const parseDateToTimestamp = (dateStr: string): number => {
     if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return 9999999999999;
-    const s = String(dateStr).trim();
+    let s = String(dateStr).trim().split("T")[0].split(" ")[0];
 
     if (s.includes("/")) {
       const parts = s.split("/");
       if (parts.length === 3) {
-        return new Date(parseInt(parts[2].slice(0, 4), 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10)).getTime();
+        return new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10)).getTime();
       }
     }
 
     if (s.includes("-")) {
-      const parts = s.split("T")[0].split("-");
+      const parts = s.split("-");
       if (parts.length === 3) {
         if (parts[0].length === 4) {
           return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10)).getTime();
@@ -306,8 +314,6 @@ export default function Dashboard() {
       setLoading(true);
       const res = await fetch(`${GOOGLE_SCRIPT_URL}?t=${Date.now()}`);
       const data = await res.json();
-      
-      // Dono formats handle karega (direct array ya payload object)
       if (Array.isArray(data)) {
         setStudents(data);
       } else if (data && typeof data === "object") {
@@ -530,7 +536,6 @@ export default function Dashboard() {
     }
   };
 
-  // Open Approval Form for Pending Student
   const openApprovalModal = (applicant: PendingApplicant) => {
     const today = new Date().toISOString().slice(0, 10);
     const initialRen = calculateRenewalDateFromBase(today, "1 Month");
@@ -553,7 +558,6 @@ export default function Dashboard() {
     setApprovingApplicant(applicant);
   };
 
-  // Submit Approval and Generate Official Receipt
   const handleConfirmApproval = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!approvingApplicant) return;
@@ -599,7 +603,6 @@ export default function Dashboard() {
         body: formBody.toString(),
       });
 
-      // Add to local state
       const newRec: Student = {
         studentId: generatedId,
         name: approvingApplicant.name,
@@ -643,7 +646,6 @@ export default function Dashboard() {
       ]);
 
       setApprovingApplicant(null);
-      alert(`Student ${approvingApplicant.name} ko ID ${generatedId} ke sath safaltapoorvak approve kar diya gaya hai!`);
       setTimeout(() => fetchStudents(), 1800);
     } catch (err) {
       alert("Approval save failed.");
@@ -817,6 +819,7 @@ export default function Dashboard() {
     .reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
   const totalCombinedIncome = allInitialAdmissionFees + allRenewalsFees;
 
+  // Sorting: Active students first, expired/due first within active
   const filteredStudents = students
     .filter((s) => {
       const q = searchQuery.toLowerCase();
@@ -854,6 +857,7 @@ export default function Dashboard() {
       return parseDateToTimestamp(b.renDate) - parseDateToTimestamp(a.renDate);
     });
 
+  // Accurate Counts for Top Indicators
   const expiredCount = students.filter(
     (s) => s.status === "Active" && getRenewalAlertStatus(s.renDate, s.status) === "EXPIRED"
   ).length;
@@ -919,7 +923,7 @@ export default function Dashboard() {
 
   return (
     <div className="flex h-screen bg-[#f1eee7] text-neutral-800 font-sans antialiased overflow-hidden select-none relative">
-      {/* Mobile Backdrop for Sidebar */}
+      {/* Mobile Backdrop */}
       {isSidebarOpen && (
         <div
           onClick={() => setIsSidebarOpen(false)}
@@ -1003,7 +1007,6 @@ export default function Dashboard() {
               </span>
             </button>
 
-            {/* NEW: Pending Admissions Sidebar Tab */}
             <button
               onClick={() => setActiveMenu("Pending")}
               className={
@@ -1031,7 +1034,6 @@ export default function Dashboard() {
         </div>
 
         <div className="w-64 p-3 border-t border-[#e3dccb] space-y-2">
-          {/* Public QR Admission Page Link Button */}
           <Link
             href="/admission"
             target="_blank"
@@ -1049,10 +1051,10 @@ export default function Dashboard() {
         </div>
       </aside>
 
-      {/* Continuous Slider Handle */}
+      {/* Slider Handle */}
       <div
         onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-        title={isSidebarOpen ? "Click to collapse sidebar" : "Click to expand sidebar"}
+        title={isSidebarOpen ? "Click to collapse" : "Click to expand"}
         className="hidden md:flex w-2.5 h-full bg-[#f1eee7] hover:bg-amber-300/80 cursor-col-resize transition-colors items-center justify-center flex-shrink-0 z-30 group select-none border-r border-[#e3dccb]"
       >
         <div className="w-0.5 h-16 bg-[#d6ccb8] group-hover:bg-amber-700 rounded-full transition-colors" />
@@ -1084,6 +1086,7 @@ export default function Dashboard() {
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Direct Add Student Button - Opens Original Detailed Form */}
             <button
               onClick={() => {
                 const today = new Date().toISOString().slice(0, 10);
@@ -1102,7 +1105,7 @@ export default function Dashboard() {
               }}
               className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2 rounded-lg transition shadow flex items-center gap-1.5"
             >
-              <span>+</span> Direct Add
+              <span>+</span> Add Student
             </button>
             <button
               onClick={fetchStudents}
@@ -1119,7 +1122,6 @@ export default function Dashboard() {
           {activeMenu === "Dashboard" && (
             <div className="flex-1 overflow-y-auto space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                {/* 1. TOTAL STUDENTS */}
                 <div className="rounded-2xl p-5 text-white shadow-sm bg-gradient-to-br from-[#2563eb] via-[#1d4ed8] to-[#1e40af] flex flex-col justify-between">
                   <div>
                     <div className="flex items-center justify-between">
@@ -1155,7 +1157,6 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* 2. OCCUPANCY */}
                 <div className="rounded-2xl p-5 text-white shadow-sm bg-gradient-to-br from-[#ea580c] via-[#c2410c] to-[#9a3412] flex flex-col justify-between">
                   <div>
                     <div className="flex items-center justify-between">
@@ -1178,7 +1179,6 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* 3. TOTAL LEDGER COLLECTION */}
                 <div className="rounded-2xl p-5 text-white shadow-sm bg-gradient-to-br from-[#059669] via-[#047857] to-[#065f46] flex flex-col justify-between">
                   <div>
                     <div className="flex items-center justify-between">
@@ -1197,11 +1197,10 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Navigation Cards */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-2">
                 <div
                   onClick={() => setActiveMenu("Pending")}
-                  className="bg-[#faf8f4] border-2 border-amber-400 p-6 rounded-2xl cursor-pointer hover:bg-amber-50/50 transition shadow-sm group relative overflow-hidden"
+                  className="bg-[#faf8f4] border-2 border-amber-400 p-6 rounded-2xl cursor-pointer hover:bg-amber-50/50 transition shadow-sm group"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3.5">
@@ -1262,7 +1261,6 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* 📝 PENDING APPLICANTS REVIEW VIEW */}
           {activeMenu === "Pending" && (
             <div className="flex-1 flex flex-col h-full overflow-hidden space-y-3">
               <div className="bg-[#faf8f4] border border-[#e3dccb] rounded-2xl p-4 flex items-center justify-between shadow-sm flex-shrink-0">
@@ -1296,7 +1294,7 @@ export default function Dashboard() {
                       {pendingApplicants.length === 0 ? (
                         <tr>
                           <td colSpan={6} className="py-16 text-center text-neutral-500 font-medium">
-                            🎉 Abhi koi pending application nahi hai. Sabhi forms approved hain!
+                            Abhi koi pending application nahi hai. Sabhi forms approved hain!
                           </td>
                         </tr>
                       ) : (
@@ -1319,7 +1317,7 @@ export default function Dashboard() {
                               </span>
                             </td>
                             <td className="py-3 px-3 text-[11px] text-neutral-600 font-medium">
-                              {app.date ? String(app.date).slice(0, 10) : "Today"}
+                              {formatDateToDDMMYYYY(app.date)}
                             </td>
                             <td className="py-3 px-4 text-center">
                               <button
@@ -1341,6 +1339,7 @@ export default function Dashboard() {
 
           {activeMenu === "Students" && (
             <div className="flex-1 flex flex-col h-full overflow-hidden space-y-3">
+              {/* TOP HEADER CONTROLS WITH LIVE INDICATOR COUNT BADGES RESTORED */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 flex-shrink-0">
                 <div className="flex flex-wrap items-center gap-2 flex-1">
                   <div className="relative flex-1 min-w-[180px] max-w-xs">
@@ -1379,12 +1378,30 @@ export default function Dashboard() {
                     <option>6 Month</option>
                     <option>9 Month</option>
                   </select>
+
+                  {/* TOP LIVE COLOR INDICATOR BADGES RESTORED WITH EXACT COUNT */}
+                  <div className="flex items-center gap-2 text-[10px] font-bold px-3 py-1 bg-white/90 border border-[#e3dccb] rounded-lg shadow-sm">
+                    <span className="flex items-center gap-1.5 text-rose-800">
+                      <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-sm animate-pulse"></span>
+                      Expired <b className="bg-rose-100 text-rose-900 px-1.5 py-0.2 rounded-full border border-rose-200">({expiredCount})</b>
+                    </span>
+                    <span className="text-neutral-300">|</span>
+                    <span className="flex items-center gap-1.5 text-orange-800">
+                      <span className="w-2.5 h-2.5 rounded-full bg-orange-400"></span>
+                      Today Due <b className="bg-orange-100 text-orange-900 px-1.5 py-0.2 rounded-full border border-orange-200">({todayDueCount})</b>
+                    </span>
+                    <span className="text-neutral-300">|</span>
+                    <span className="flex items-center gap-1.5 text-amber-800">
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-300"></span>
+                      Due ≤3 Days <b className="bg-amber-100 text-amber-900 px-1.5 py-0.2 rounded-full border border-amber-200">({due3DaysCount})</b>
+                    </span>
+                  </div>
                 </div>
 
                 <button
                   onClick={() => {
                     const headers = ["Student ID", "Name", "Gender", "Father Name", "Course Exam", "Mobile", "Seat", "Plan", "Fee", "Status", "Type", "Admission Date", "Renewal Date", "Aadhaar"];
-                    const rows = filteredStudents.map((s) => [s.studentId, s.name, s.gender, s.fatherName, s.course, s.phone, s.seatNo, s.plan, s.monthlyFee, s.status, s.studentType, s.admDate, s.renDate, s.idProof]);
+                    const rows = filteredStudents.map((s) => [s.studentId, s.name, s.gender, s.fatherName, s.course, s.phone, s.seatNo, s.plan, s.monthlyFee, s.status, s.studentType, formatDateToDDMMYYYY(s.admDate), formatDateToDDMMYYYY(s.renDate), s.idProof]);
                     const csv = "data:text/csv;charset=utf-8," + [headers, ...rows].map((r) => r.join(",")).join("\n");
                     const a = document.createElement("a");
                     a.href = encodeURI(csv);
@@ -1497,16 +1514,17 @@ export default function Dashboard() {
                                 )}
                               </td>
 
+                              {/* CURRENT MEMBERSHIP PERIOD - CLEAN DATES WITHOUT TIMESTAMPS */}
                               <td className="py-3 px-4 space-y-0.5">
                                 <p className="font-bold text-neutral-900">
                                   {activePeriod.plan}
                                 </p>
                                 <p className="text-[11px]">
-                                  From: <span className="text-emerald-700 font-bold">{activePeriod.startDate}</span>
+                                  From: <span className="text-emerald-700 font-bold">{formatDateToDDMMYYYY(activePeriod.startDate)}</span>
                                 </p>
                                 <div className="text-[11px] flex items-center gap-1.5 flex-wrap">
                                   <span>
-                                    To: <span className="font-bold text-red-600">{activePeriod.endDate}</span>
+                                    To: <span className="font-bold text-red-600">{formatDateToDDMMYYYY(activePeriod.endDate)}</span>
                                   </span>
                                   {alertStatus === "EXPIRED" && (
                                     <span className="bg-rose-600 text-white font-black text-[9px] px-1.5 py-0.2 rounded uppercase animate-pulse shadow-sm">
@@ -1758,7 +1776,7 @@ export default function Dashboard() {
         </main>
       </div>
 
-      {/* ⚡ NEW: APPROVAL & RECEIPT GENERATION MODAL */}
+      {/* APPROVAL & RECEIPT MODAL */}
       {approvingApplicant && (
         <div
           onClick={() => setApprovingApplicant(null)}
@@ -1787,7 +1805,6 @@ export default function Dashboard() {
             </div>
 
             <form onSubmit={handleConfirmApproval} className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
-              {/* Plan Selection */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">MEMBERSHIP PLAN *</label>
@@ -1822,7 +1839,6 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Seat Allocation */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">SELECT CABIN ROW</label>
@@ -1877,7 +1893,6 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Dates */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">ADMISSION DATE *</label>
@@ -1909,7 +1924,6 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Payment Details */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-[#f8fbff] p-3 rounded-xl border border-blue-100">
                 <div>
                   <label className="block text-neutral-700 font-bold mb-1 uppercase text-[10px]">FEE AMOUNT (₹) *</label>
@@ -2136,132 +2150,364 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* DIRECT ADD / EDIT MODAL */}
+      {/* ORIGINAL DETAILED "+ ADD STUDENT" & EDIT MODAL RESTORED FULLY */}
       {(showAddModal || editStudent) && (
         <div
           onClick={() => {
             setShowAddModal(false);
             setEditStudent(null);
           }}
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-150"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white border rounded-2xl w-full max-w-xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+            className="bg-white border border-neutral-200 rounded-2xl w-full max-w-xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
           >
-            <div className="flex justify-between items-start border-b pb-3">
-              <h3 className="font-bold text-neutral-900 text-base">
-                {editStudent ? "Edit Student Details" : "New Student Admission"}
-              </h3>
-              <button onClick={() => { setShowAddModal(false); setEditStudent(null); }} className="font-bold text-xs">✕</button>
-            </div>
-            <form onSubmit={handleSaveStudent} className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-neutral-600 mb-1 uppercase text-[10px]">Student Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })}
-                    className="w-full bg-neutral-50 border p-2 rounded-lg font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-neutral-600 mb-1 uppercase text-[10px]">Father's Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.fatherName}
-                    onChange={(e) => setFormData({ ...formData, fatherName: e.target.value.toUpperCase() })}
-                    className="w-full bg-neutral-50 border p-2 rounded-lg font-bold"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-neutral-600 mb-1 uppercase text-[10px]">Mobile *</label>
-                  <input
-                    type="tel"
-                    required
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full bg-neutral-50 border p-2 rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-neutral-600 mb-1 uppercase text-[10px]">Alt Contact *</label>
-                  <input
-                    type="tel"
-                    value={formData.altPhone}
-                    onChange={(e) => setFormData({ ...formData, altPhone: e.target.value })}
-                    className="w-full bg-neutral-50 border p-2 rounded-lg"
-                  />
-                </div>
-              </div>
+            <div className="flex justify-between items-start border-b border-neutral-200 pb-3">
               <div>
-                <label className="block font-bold text-neutral-600 mb-1 uppercase text-[10px]">Address</label>
-                <input
-                  type="text"
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value.toUpperCase() })}
-                  className="w-full bg-neutral-50 border p-2 rounded-lg"
-                />
+                <h3 className="font-bold text-neutral-900 text-base flex items-center gap-1.5">
+                  <span className="text-neutral-700 text-lg">+</span> {editStudent ? "Edit Student Details" : "New Student Admission"}
+                </h3>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  Enter details to enroll or update a library member
+                </p>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddModal(false);
+                  setEditStudent(null);
+                }}
+                className="w-6 h-6 rounded-full bg-neutral-100 hover:bg-neutral-200 flex items-center justify-center text-neutral-500 font-bold text-xs transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveStudent} className="space-y-4 text-xs">
+              <div className="space-y-2.5">
+                <p className="text-[11px] font-bold text-blue-600 flex items-center gap-1 tracking-wider uppercase">
+                  <span>👤</span> BASIC DETAILS
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">STUDENT NAME *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="FULL NAME"
+                      value={formData.name || ""}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 uppercase focus:outline-none focus:border-blue-500 font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">FATHER'S NAME *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="FATHER'S NAME"
+                      value={formData.fatherName || ""}
+                      onChange={(e) => setFormData({ ...formData, fatherName: e.target.value.toUpperCase() })}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 uppercase focus:outline-none focus:border-blue-500 font-semibold"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1.5 uppercase text-[10px]">GENDER</label>
+                    <div className="flex items-center gap-4 text-neutral-700 font-semibold pt-1">
+                      {["Male", "Female", "Other"].map((g) => (
+                        <label key={g} className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="gender"
+                            value={g}
+                            checked={formData.gender === g}
+                            onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                            className="accent-blue-600"
+                          />
+                          <span>{g}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">DATE OF BIRTH</label>
+                    <input
+                      type="date"
+                      value={formData.dob || ""}
+                      onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-1.5 text-neutral-700 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2.5 pt-2 border-t border-neutral-100">
+                <p className="text-[11px] font-bold text-blue-600 flex items-center gap-1 tracking-wider uppercase">
+                  <span>📞</span> CONTACT & ADDRESS
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">MOBILE (WHATSAPP) *</label>
+                    <input
+                      type="tel"
+                      required
+                      placeholder="10 DIGIT MOBILE NO."
+                      value={formData.phone || ""}
+                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">PARENTS / ALT CONTACT *</label>
+                    <input
+                      type="tel"
+                      placeholder="10 DIGIT CONTACT NO."
+                      value={formData.altPhone || ""}
+                      onChange={(e) => setFormData({ ...formData, altPhone: e.target.value })}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
                 <div>
-                  <label className="block font-bold text-neutral-600 mb-1 uppercase text-[10px]">Admission Date *</label>
+                  <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">ADDRESS</label>
                   <input
-                    type="date"
-                    required
-                    value={formData.admDate}
-                    onChange={(e) => setFormData({ ...formData, admDate: e.target.value, renDate: calculateRenewalDateFromBase(e.target.value, formData.plan) })}
-                    className="w-full bg-neutral-50 border p-1.5 rounded-lg"
+                    type="text"
+                    placeholder="HOUSE NO, AREA, CITY"
+                    value={formData.address || ""}
+                    onChange={(e) => setFormData({ ...formData, address: e.target.value.toUpperCase() })}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 uppercase focus:outline-none focus:border-blue-500 font-semibold"
                   />
                 </div>
-                <div>
-                  <label className="block font-bold text-neutral-600 mb-1 uppercase text-[10px]">Renewal Date *</label>
-                  <input
-                    type="date"
-                    required
-                    value={formData.renDate}
-                    onChange={(e) => setFormData({ ...formData, renDate: e.target.value })}
-                    className="w-full bg-neutral-50 border p-1.5 rounded-lg"
-                  />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">PINCODE *</label>
+                    <input
+                      type="text"
+                      placeholder="6 DIGIT PINCODE"
+                      value={formData.pincode || ""}
+                      onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px] flex items-center justify-between">
+                      <span>AADHAAR NO. (LAST 4 DIGITS) *</span>
+                      <span className="text-neutral-400 font-normal text-[9px]">Saves as XXXX-XXXX-LAST4</span>
+                    </label>
+                    <div className="flex items-center h-[38px] border border-neutral-200 rounded-lg overflow-hidden bg-neutral-50 focus-within:border-blue-500">
+                      <span className="bg-neutral-100 text-neutral-500 px-3 py-2 font-mono text-xs border-r border-neutral-200 whitespace-nowrap select-none font-bold">
+                        XXXX-XXXX-
+                      </span>
+                      <input
+                        type="text"
+                        maxLength={4}
+                        placeholder="1234"
+                        value={formData.idProof ? formData.idProof.replace(/\D/g, "").slice(-4) : ""}
+                        onChange={(e) => setFormData({ ...formData, idProof: e.target.value.replace(/\D/g, "").slice(0, 4) })}
+                        className="w-full bg-transparent px-3 py-2 text-neutral-800 font-mono tracking-widest text-xs focus:outline-none"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-neutral-600 mb-1 uppercase text-[10px]">Select Row</label>
-                  <select
-                    value={formData.selectedRow}
-                    onChange={(e) => handleRowChange(e.target.value)}
-                    className="w-full bg-neutral-50 border p-2 rounded-lg font-bold"
-                  >
-                    <option value="None">None / No Seat</option>
-                    {LIBRARY_SECTIONS.map((sec) => (
-                      <option key={sec.name} value={sec.name}>{sec.name}</option>
-                    ))}
-                  </select>
+
+              <div className="space-y-2.5 pt-2 border-t border-neutral-100">
+                <p className="text-[11px] font-bold text-blue-600 flex items-center gap-1 tracking-wider uppercase">
+                  <span>📚</span> LIBRARY MEMBERSHIP
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">STATUS</label>
+                    <select
+                      value={formData.status || "Active"}
+                      onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 font-bold focus:outline-none focus:border-blue-500 cursor-pointer"
+                    >
+                      <option value="Active">Active</option>
+                      <option value="Inactive">Inactive</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">STATUS TYPE</label>
+                    <select
+                      value={formData.studentType || "Reserved"}
+                      onChange={(e) => setFormData({ ...formData, studentType: e.target.value as any })}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 font-semibold focus:outline-none focus:border-blue-500 cursor-pointer"
+                    >
+                      <option value="Reserved">Reserved</option>
+                      <option value="Unreserved">Unreserved</option>
+                    </select>
+                  </div>
                 </div>
-                <div>
-                  <label className="block font-bold text-neutral-600 mb-1 uppercase text-[10px]">Seat Number</label>
-                  <select
-                    disabled={formData.selectedRow === "None"}
-                    value={formData.selectedSeatNum}
-                    onChange={(e) => handleSeatNumChange(e.target.value)}
-                    className="w-full bg-neutral-50 border p-2 rounded-lg font-bold disabled:bg-neutral-100"
-                  >
-                    {getAvailableSeatsForRow(formData.selectedRow || "", editStudent?.seatNo).map((num) => (
-                      <option key={num} value={num}>Seat #{num}</option>
-                    ))}
-                  </select>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">ADMISSION DATE *</label>
+                    <input
+                      type="date"
+                      required
+                      value={formData.admDate || ""}
+                      onChange={(e) => {
+                        const ren = calculateRenewalDateFromBase(e.target.value, formData.plan);
+                        setFormData({ ...formData, admDate: e.target.value, renDate: ren });
+                      }}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-1.5 text-neutral-800 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px] flex items-center justify-between">
+                      <span>RENEWAL DATE *</span>
+                      <span className="text-emerald-600 text-[9px] font-semibold">Auto-calculated</span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={formData.renDate || ""}
+                      onChange={(e) => setFormData({ ...formData, renDate: e.target.value })}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-1.5 text-neutral-800 focus:outline-none focus:border-blue-500 font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">PLAN DURATION</label>
+                    <select
+                      value={formData.plan || "1 Month"}
+                      onChange={(e) => {
+                        const plan = e.target.value;
+                        const ren = calculateRenewalDateFromBase(formData.admDate, plan);
+                        const autoFee = PLAN_FEE_RATES[plan] ?? 1200;
+                        setFormData({ ...formData, plan, renDate: ren, monthlyFee: autoFee });
+                      }}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 font-semibold focus:outline-none focus:border-blue-500 cursor-pointer"
+                    >
+                      <option value="6hrs/Month">6hrs/Month</option>
+                      <option value="1 Month">1 Month</option>
+                      <option value="3 Month">3 Month</option>
+                      <option value="6 Month">6 Month</option>
+                      <option value="9 Month">9 Month</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px] flex items-center justify-between">
+                      <span>FEE AMOUNT (₹) *</span>
+                      <span className="text-neutral-400 text-[9px] font-normal">Editable</span>
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 1200"
+                      value={formData.monthlyFee === "" ? "" : formData.monthlyFee}
+                      onChange={(e) => setFormData({ ...formData, monthlyFee: e.target.value === "" ? "" : Number(e.target.value) })}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 font-bold text-sm focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">SELECT ROW</label>
+                    <select
+                      value={formData.selectedRow || "None"}
+                      onChange={(e) => handleRowChange(e.target.value)}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 font-bold focus:outline-none focus:border-blue-500 cursor-pointer"
+                    >
+                      <option value="None">None / No Seat (Seat nahi dena)</option>
+                      {LIBRARY_SECTIONS.map((sec) => (
+                        <option key={sec.name} value={sec.name}>
+                          {sec.name} ({sec.count} Seats)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px] flex items-center justify-between">
+                      <span>SELECT AVAILABLE SEAT</span>
+                      <span className="text-emerald-600 text-[9px] font-bold">Only Free Seats</span>
+                    </label>
+                    <select
+                      disabled={formData.selectedRow === "None"}
+                      value={formData.selectedSeatNum || ""}
+                      onChange={(e) => handleSeatNumChange(e.target.value)}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 font-bold focus:outline-none focus:border-blue-500 cursor-pointer disabled:bg-neutral-100 disabled:text-neutral-400"
+                    >
+                      {formData.selectedRow === "None" ? (
+                        <option value="">No Seat Allotted (-)</option>
+                      ) : getAvailableSeatsForRow(formData.selectedRow || "", editStudent?.seatNo).length === 0 ? (
+                        <option value="">No Free Seats in this Row</option>
+                      ) : (
+                        <>
+                          <option value="none">No Seat (-)</option>
+                          {getAvailableSeatsForRow(formData.selectedRow || "", editStudent?.seatNo).map((num) => (
+                            <option key={num} value={num}>
+                              Seat #{num}
+                            </option>
+                          ))}
+                        </>
+                      )}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">BATCH / SHIFT</label>
+                    <input
+                      type="text"
+                      placeholder="E.G. MORNING (6 AM - 2 PM), FULL DAY"
+                      value={formData.batch || ""}
+                      onChange={(e) => setFormData({ ...formData, batch: e.target.value.toUpperCase() })}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 uppercase focus:outline-none focus:border-blue-500 placeholder:text-neutral-400 font-normal"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">COURSE / TARGET EXAM</label>
+                    <input
+                      type="text"
+                      placeholder="TARGET EXAM (E.G. UPSC, SSC, GATE, NEET)"
+                      value={formData.course || ""}
+                      onChange={(e) => setFormData({ ...formData, course: e.target.value.toUpperCase() })}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 uppercase focus:outline-none focus:border-blue-500 placeholder:text-neutral-400 font-normal"
+                    />
+                  </div>
                 </div>
               </div>
-              <div className="pt-3 border-t flex justify-end gap-2.5">
-                <button type="button" onClick={() => { setShowAddModal(false); setEditStudent(null); }} className="px-4 py-2 border rounded-lg font-bold">Cancel</button>
-                <button type="submit" disabled={isSubmitting} className="px-5 py-2 bg-blue-600 text-white rounded-lg font-bold">
-                  {isSubmitting ? "Saving..." : "Confirm & Save"}
+
+              <div className="pt-3 border-t border-neutral-200 flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setEditStudent(null);
+                  }}
+                  className="px-4 py-2 border border-neutral-300 rounded-lg text-neutral-700 hover:bg-neutral-100 font-bold transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2 rounded-lg transition shadow-md shadow-blue-500/20"
+                >
+                  {isSubmitting ? "Saving..." : editStudent ? "Update & Save" : "Confirm & Save"}
                 </button>
               </div>
             </form>
