@@ -127,108 +127,89 @@ export default function Dashboard() {
   };
   const [formData, setFormData] = useState<Student>(initialForm);
 
-  // Exact Clean DD/MM/YYYY Output Formatter
-  const formatDateToDDMMYYYY = (dateStr: any): string => {
-    if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return "-";
-    const raw = String(dateStr).trim();
-    const cleanStr = raw.split("T")[0].split(" ")[0].trim();
+  // 1. UNIVERSAL TIMESTAMP PARSER: Parses DD/MM/YYYY, D/M/YYYY, YYYY-MM-DD
+  const getExactTimestamp = (dateStr: any): number => {
+    if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return 0;
+    const s = String(dateStr).trim();
 
-    if (cleanStr.includes("/")) {
-      const parts = cleanStr.split("/");
+    // DD/MM/YYYY or D/M/YYYY
+    if (s.includes("/")) {
+      const clean = s.split("T")[0].split(" ")[0];
+      const parts = clean.split("/");
       if (parts.length === 3) {
         if (parts[2].length === 4) {
-          return `${parts[0].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[2]}`;
+          const d = parseInt(parts[0], 10);
+          const m = parseInt(parts[1], 10) - 1;
+          const y = parseInt(parts[2], 10);
+          const dt = new Date(y, m, d);
+          if (!isNaN(dt.getTime())) return dt.getTime();
         } else if (parts[0].length === 4) {
-          return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`;
+          const y = parseInt(parts[0], 10);
+          const m = parseInt(parts[1], 10) - 1;
+          const d = parseInt(parts[2], 10);
+          const dt = new Date(y, m, d);
+          if (!isNaN(dt.getTime())) return dt.getTime();
         }
       }
     }
 
-    if (cleanStr.includes("-")) {
-      const parts = cleanStr.split("-");
+    // YYYY-MM-DD or DD-MM-YYYY
+    if (s.includes("-")) {
+      const clean = s.split("T")[0].split(" ")[0];
+      const parts = clean.split("-");
       if (parts.length === 3) {
         if (parts[0].length === 4) {
-          return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`;
-        } else {
-          return `${parts[0].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[2]}`;
+          const y = parseInt(parts[0], 10);
+          const m = parseInt(parts[1], 10) - 1;
+          const d = parseInt(parts[2], 10);
+          const dt = new Date(y, m, d);
+          if (!isNaN(dt.getTime())) return dt.getTime();
+        } else if (parts[2].length === 4) {
+          const d = parseInt(parts[0], 10);
+          const m = parseInt(parts[1], 10) - 1;
+          const y = parseInt(parts[2], 10);
+          const dt = new Date(y, m, d);
+          if (!isNaN(dt.getTime())) return dt.getTime();
         }
       }
     }
 
-    try {
-      const d = new Date(raw);
-      if (!isNaN(d.getTime())) {
-        const day = String(d.getDate()).padStart(2, "0");
-        const month = String(d.getMonth() + 1).padStart(2, "0");
-        const year = d.getFullYear();
-        return `${day}/${month}/${year}`;
-      }
-    } catch (e) {}
+    // Fallback native parse
+    const nativeDt = new Date(s);
+    if (!isNaN(nativeDt.getTime())) return nativeDt.getTime();
 
-    return cleanStr;
+    return 0;
+  };
+
+  // CLEAN DD/MM/YYYY DISPLAY
+  const formatDateToDDMMYYYY = (dateStr: any): string => {
+    if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return "-";
+    const ts = getExactTimestamp(dateStr);
+    if (!ts) return String(dateStr).trim().split("T")[0].split(" ")[0];
+
+    const d = new Date(ts);
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
   };
 
   const formatToInputDate = (dateStr: any): string => {
     if (!dateStr || dateStr === "-") return "";
-    const raw = String(dateStr).trim();
-    const cleanStr = raw.split("T")[0].split(" ")[0].trim();
-
-    if (cleanStr.includes("/")) {
-      const parts = cleanStr.split("/");
-      if (parts.length === 3) {
-        if (parts[2].length === 4) {
-          return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
-        }
-      }
-    }
-
-    if (cleanStr.includes("-")) {
-      const parts = cleanStr.split("-");
-      if (parts.length === 3) {
-        if (parts[0].length === 4) return cleanStr;
-        return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
-      }
-    }
-
-    try {
-      const d = new Date(raw);
-      if (!isNaN(d.getTime())) {
-        return d.toISOString().slice(0, 10);
-      }
-    } catch (e) {}
-
-    return "";
+    const ts = getExactTimestamp(dateStr);
+    if (!ts) return "";
+    const d = new Date(ts);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   };
 
   const calculateRenewalDateFromBase = (baseDateStr: string, planStr: string): string => {
     if (!baseDateStr || baseDateStr === "-") return "";
-    let cleanStr = String(baseDateStr).trim().split("T")[0].split(" ")[0];
+    const ts = getExactTimestamp(baseDateStr);
+    const baseDate = ts ? new Date(ts) : new Date();
 
-    let y = 0, m = 0, d = 0;
-    if (cleanStr.includes("-")) {
-      const parts = cleanStr.split("-");
-      if (parts[0].length === 4) {
-        y = parseInt(parts[0], 10);
-        m = parseInt(parts[1], 10);
-        d = parseInt(parts[2], 10);
-      } else {
-        d = parseInt(parts[0], 10);
-        m = parseInt(parts[1], 10);
-        y = parseInt(parts[2], 10);
-      }
-    } else if (cleanStr.includes("/")) {
-      const parts = cleanStr.split("/");
-      d = parseInt(parts[0], 10);
-      m = parseInt(parts[1], 10);
-      y = parseInt(parts[2], 10);
-    }
-
-    if (!y || !m || !d || isNaN(y) || isNaN(m) || isNaN(d)) {
-      const now = new Date();
-      y = now.getFullYear();
-      m = now.getMonth() + 1;
-      d = now.getDate();
-    }
+    let y = baseDate.getFullYear();
+    let m = baseDate.getMonth() + 1;
+    let d = baseDate.getDate();
 
     let monthsToAdd = 1;
     if (planStr.includes("3 Month")) monthsToAdd = 3;
@@ -250,74 +231,27 @@ export default function Dashboard() {
     return `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(finalDay).padStart(2, "0")}`;
   };
 
-  const getDateScore = (dateStr: any): number => {
-    if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return 0;
-    const s = String(dateStr).trim().split("T")[0].split(" ")[0];
-
-    if (s.includes("/")) {
-      const parts = s.split("/");
-      if (parts.length === 3) {
-        if (parts[2].length === 4) {
-          return parseInt(`${parts[2]}${parts[1].padStart(2, "0")}${parts[0].padStart(2, "0")}`, 10) || 0;
-        } else if (parts[0].length === 4) {
-          return parseInt(`${parts[0]}${parts[1].padStart(2, "0")}${parts[2].padStart(2, "0")}`, 10) || 0;
-        }
-      }
-    }
-
-    if (s.includes("-")) {
-      const parts = s.split("-");
-      if (parts.length === 3) {
-        if (parts[0].length === 4) {
-          return parseInt(`${parts[0]}${parts[1].padStart(2, "0")}${parts[2].padStart(2, "0")}`, 10) || 0;
-        } else if (parts[2].length === 4) {
-          return parseInt(`${parts[2]}${parts[1].padStart(2, "0")}${parts[0].padStart(2, "0")}`, 10) || 0;
-        }
-      }
-    }
-
-    try {
-      const d = new Date(s);
-      if (!isNaN(d.getTime())) {
-        return parseInt(`${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`, 10) || 0;
-      }
-    } catch (e) {}
-
-    return 0;
-  };
-
+  // 2. ACCURATE RENEWAL ALERT STATUS (CALCULATES ROW COLOR & LIVE BADGES)
   const getRenewalAlertStatus = (
     renDateStr: string,
     status: string
   ): "EXPIRED" | "TODAY" | "WARNING_3DAYS" | "SAFE" => {
     if (status !== "Active" || !renDateStr || renDateStr === "-") return "SAFE";
-    const renScore = getDateScore(renDateStr);
-    if (!renScore) return "SAFE";
+    const renTs = getExactTimestamp(renDateStr);
+    if (!renTs) return "SAFE";
 
-    const now = new Date();
-    const currentScore = parseInt(
-      `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`,
-      10
-    );
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayTs = today.getTime();
 
-    if (renScore < currentScore) return "EXPIRED";
-    if (renScore === currentScore) return "TODAY";
-
-    const cleanStr = String(renDateStr).trim().split("T")[0].split(" ")[0];
-    const parts = cleanStr.includes("/") ? cleanStr.split("/") : cleanStr.split("-");
-    let renDateObj = new Date();
-    if (parts.length === 3) {
-      if (parts[0].length === 4) {
-        renDateObj = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-      } else {
-        renDateObj = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
-      }
-    }
-    const todayObj = new Date();
-    todayObj.setHours(0, 0, 0, 0);
+    const renDateObj = new Date(renTs);
     renDateObj.setHours(0, 0, 0, 0);
-    const diffDays = Math.ceil((renDateObj.getTime() - todayObj.getTime()) / (1000 * 60 * 60 * 24));
+    const normalizedRenTs = renDateObj.getTime();
 
+    const diffDays = Math.ceil((normalizedRenTs - todayTs) / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) return "EXPIRED";
+    if (diffDays === 0) return "TODAY";
     if (diffDays <= 3 && diffDays > 0) return "WARNING_3DAYS";
     return "SAFE";
   };
@@ -393,7 +327,7 @@ export default function Dashboard() {
     setFormData((prev) => ({ ...prev, selectedSeatNum: seatNum, seatNo: `${row}-${seatNum}` }));
   };
 
-  // Student ke sabhi receipts nikaalna - NAYI HAMESHA TOP PAR
+  // COMPILED HISTORY: SORTED DESCENDING (NEWEST TRANSACTION AT TOP)
   const getCompiledHistoryForStudent = (st: Student): RenewalLog[] => {
     const rawLogs = renewalHistory.filter(
       (h) =>
@@ -426,9 +360,9 @@ export default function Dashboard() {
     }
 
     return combined.sort((a, b) => {
-      const scoreA = Math.max(getDateScore(a.payDate), getDateScore(a.newRenDate));
-      const scoreB = Math.max(getDateScore(b.payDate), getDateScore(b.newRenDate));
-      return scoreB - scoreA;
+      const tsA = Math.max(getExactTimestamp(a.newRenDate), getExactTimestamp(a.payDate));
+      const tsB = Math.max(getExactTimestamp(b.newRenDate), getExactTimestamp(b.payDate));
+      return tsB - tsA;
     });
   };
 
@@ -460,14 +394,12 @@ export default function Dashboard() {
     setStudentToRenew(student);
   };
 
-  // STEP 1: Renewal form submit karne par confirmation review modal khulega
   const handlePreSubmitRenew = (e: React.FormEvent) => {
     e.preventDefault();
     if (!studentToRenew) return;
     setShowRenewConfirmModal(true);
   };
 
-  // STEP 2: Review modal me Confirm karne par hi final save hoga
   const handleFinalConfirmRenew = async () => {
     if (!studentToRenew) return;
 
@@ -499,7 +431,7 @@ export default function Dashboard() {
         body: formBody.toString(),
       });
 
-      // Update state: Original Admission Date bilkul chhedi nahi jayegi
+      // Update state: Admission date remains frozen, renewal date updates
       setStudents((prev) =>
         prev.map((s) =>
           s.rowIndex === studentToRenew.rowIndex
@@ -513,7 +445,6 @@ export default function Dashboard() {
         )
       );
 
-      // Latest receipt list me top par judegi
       setRenewalHistory((prev) => [
         {
           txId: "TX-" + Date.now(),
@@ -621,7 +552,6 @@ export default function Dashboard() {
     }
   };
 
-  // LEAVE / RE-JOIN MODAL CONFIRMATION
   const executeToggleStatus = async () => {
     if (!studentToToggleStatus) return;
     const newStatus = studentToToggleStatus.status === "Active" ? "Inactive" : "Active";
@@ -707,7 +637,7 @@ export default function Dashboard() {
     .reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
   const totalCombinedIncome = allInitialAdmissionFees + allRenewalsFees;
 
-  // Sorting
+  // 3. PRIORITY SORTING: EXPIRED -> TODAY -> WARNING <= 3 DAYS -> SAFE (ASCENDING RENEWAL DATE)
   const filteredStudents = students
     .filter((s) => {
       const q = searchQuery.toLowerCase();
@@ -736,16 +666,29 @@ export default function Dashboard() {
       return matchesSearch && matchesStatus && matchesPlan;
     })
     .sort((a, b) => {
+      // Rule 1: Active students always above Inactive
       if (a.status === "Active" && b.status !== "Active") return -1;
       if (a.status !== "Active" && b.status === "Active") return 1;
 
-      if (a.status === "Active" && b.status === "Active") {
-        return getDateScore(a.renDate) - getDateScore(b.renDate);
+      // Rule 2: Inactive students sorted by newest date first
+      if (a.status !== "Active" && b.status !== "Active") {
+        return getExactTimestamp(b.renDate) - getExactTimestamp(a.renDate);
       }
-      return getDateScore(b.renDate) - getDateScore(a.renDate);
+
+      // Rule 3: Active students sorted by Urgency status first
+      const statusRank = { EXPIRED: 1, TODAY: 2, WARNING_3DAYS: 3, SAFE: 4 };
+      const rankA = statusRank[getRenewalAlertStatus(a.renDate, a.status)];
+      const rankB = statusRank[getRenewalAlertStatus(b.renDate, b.status)];
+
+      if (rankA !== rankB) {
+        return rankA - rankB; // Expired (1) -> Today (2) -> Warning (3) -> Safe (4)
+      }
+
+      // Rule 4: Within same priority, earliest due date first
+      return getExactTimestamp(a.renDate) - getExactTimestamp(b.renDate);
     });
 
-  // Top Indicators
+  // Top Indicators: Direct check with student's current Sheet1 Renewal Date
   const expiredCount = students.filter((s) => {
     if (s.status !== "Active") return false;
     return getRenewalAlertStatus(s.renDate, s.status) === "EXPIRED";
@@ -1043,7 +986,7 @@ export default function Dashboard() {
                       <p className="text-[11px] font-bold tracking-widest uppercase opacity-90">TOTAL COLLECTION (LEDGER)</p>
                       <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-bold">Lifetime</span>
                     </div>
-                    <p className="text-4xl font-black mt-2 tracking-tight">{totalCombinedIncome.toLocaleString("en-IN")}</p>
+                    <p className="text-4xl font-black mt-2 tracking-tight">₹{totalCombinedIncome.toLocaleString("en-IN")}</p>
                   </div>
 
                   <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs font-semibold">
@@ -1215,6 +1158,7 @@ export default function Dashboard() {
                           const alertStatus = getRenewalAlertStatus(st.renDate, st.status);
                           const isRenewedMember = st.status === "Active" && hasStudentRenewed(st);
 
+                          // 4. ACCURATE ROW BACKGROUND COLORING
                           let rowColorClass = "";
                           if (st.status !== "Active") {
                             rowColorClass = "bg-[#eee9dc]/80 opacity-60 hover:opacity-100 hover:bg-[#e4ded0]";
@@ -1351,7 +1295,6 @@ export default function Dashboard() {
                                     <span>⚡</span> Renew
                                   </button>
 
-                                  {/* LEAVE / RE-JOIN WITH POPUP CONFIRMATION */}
                                   <button
                                     onClick={() => setStudentToToggleStatus(st)}
                                     title={st.status === "Active" ? "Mark Inactive / Leave" : "Mark Active / Re-join"}
@@ -1630,7 +1573,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* NEW: RENEWAL REVIEW & CONFIRMATION POPUP */}
+      {/* RENEWAL REVIEW & CONFIRMATION POPUP */}
       {showRenewConfirmModal && studentToRenew && (
         <div
           onClick={() => setShowRenewConfirmModal(false)}
@@ -1698,7 +1641,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* NEW: LEAVE / RE-JOIN STATUS TOGGLE CONFIRMATION POPUP */}
+      {/* LEAVE / RE-JOIN STATUS TOGGLE CONFIRMATION POPUP */}
       {studentToToggleStatus && (
         <div
           onClick={() => setStudentToToggleStatus(null)}
@@ -1797,7 +1740,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* RECEIPTS LEDGER MODAL - LATEST TRANSITION TOP PAR */}
+      {/* RECEIPTS LEDGER MODAL - LATEST ON TOP */}
       {viewHistoryStudent && (
         <div
           onClick={() => setViewHistoryStudent(null)}
