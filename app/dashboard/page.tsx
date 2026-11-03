@@ -75,6 +75,8 @@ export default function Dashboard() {
   const [viewStudent, setViewStudent] = useState<Student | null>(null);
   const [viewHistoryStudent, setViewHistoryStudent] = useState<Student | null>(null);
   const [studentToRenew, setStudentToRenew] = useState<Student | null>(null);
+  const [showRenewConfirmModal, setShowRenewConfirmModal] = useState(false);
+  const [studentToToggleStatus, setStudentToToggleStatus] = useState<Student | null>(null);
   const [studentToDelete, setStudentToDelete] = useState<{ student: Student; sNo: number } | null>(null);
   const [editStudent, setEditStudent] = useState<Student | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -423,7 +425,6 @@ export default function Dashboard() {
       });
     }
 
-    // NAYA TRANSACTION STRICTLY AT INDEX 0 (TOP)
     return combined.sort((a, b) => {
       const scoreA = Math.max(getDateScore(a.payDate), getDateScore(a.newRenDate));
       const scoreB = Math.max(getDateScore(b.payDate), getDateScore(b.newRenDate));
@@ -445,7 +446,6 @@ export default function Dashboard() {
     const currentPlan = student.plan || "1 Month";
     const autoFee = PLAN_FEE_RATES[currentPlan] ?? 1200;
 
-    // Start date seedha student ki current Renewal Date banegi
     const startDateVal = formatToInputDate(student.renDate) || new Date().toISOString().slice(0, 10);
     const calcDate = calculateRenewalDateFromBase(startDateVal, currentPlan);
 
@@ -460,8 +460,15 @@ export default function Dashboard() {
     setStudentToRenew(student);
   };
 
-  const handleConfirmRenew = async (e: React.FormEvent) => {
+  // STEP 1: Renewal form submit karne par confirmation review modal khulega
+  const handlePreSubmitRenew = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!studentToRenew) return;
+    setShowRenewConfirmModal(true);
+  };
+
+  // STEP 2: Review modal me Confirm karne par hi final save hoga
+  const handleFinalConfirmRenew = async () => {
     if (!studentToRenew) return;
 
     try {
@@ -500,7 +507,7 @@ export default function Dashboard() {
                 ...s,
                 status: "Active",
                 plan: renewFormData.plan,
-                renDate: renewFormData.newRenDate, // Sirf latest Renewal Date update hogi
+                renDate: renewFormData.newRenDate,
               }
             : s
         )
@@ -523,6 +530,7 @@ export default function Dashboard() {
         ...prev,
       ]);
 
+      setShowRenewConfirmModal(false);
       setStudentToRenew(null);
       setTimeout(() => fetchStudents(), 1800);
     } catch (err) {
@@ -613,15 +621,17 @@ export default function Dashboard() {
     }
   };
 
-  const handleQuickToggleStatus = async (student: Student) => {
-    const newStatus = student.status === "Active" ? "Inactive" : "Active";
+  // LEAVE / RE-JOIN MODAL CONFIRMATION
+  const executeToggleStatus = async () => {
+    if (!studentToToggleStatus) return;
+    const newStatus = studentToToggleStatus.status === "Active" ? "Inactive" : "Active";
     try {
       const payload: Record<string, any> = {
         action: "edit",
-        rowIndex: student.rowIndex,
-        ...student,
+        rowIndex: studentToToggleStatus.rowIndex,
+        ...studentToToggleStatus,
         status: newStatus,
-        seatNo: newStatus === "Inactive" ? "-" : student.seatNo,
+        seatNo: newStatus === "Inactive" ? "-" : studentToToggleStatus.seatNo,
       };
 
       const formBody = new URLSearchParams();
@@ -637,8 +647,9 @@ export default function Dashboard() {
       });
 
       setStudents((prev) =>
-        prev.map((s) => (s.rowIndex === student.rowIndex ? { ...s, status: newStatus, seatNo: payload.seatNo } : s))
+        prev.map((s) => (s.rowIndex === studentToToggleStatus.rowIndex ? { ...s, status: newStatus, seatNo: payload.seatNo } : s))
       );
+      setStudentToToggleStatus(null);
       setTimeout(() => fetchStudents(), 1800);
     } catch (err) {
       alert("Status update failed.");
@@ -666,7 +677,7 @@ export default function Dashboard() {
     }
   };
 
-  // Counters
+  // Metrics
   const totalStudents = students.length;
   const activeStudents = students.filter((s) => s.status === "Active").length;
   const inactiveStudents = totalStudents - activeStudents;
@@ -734,7 +745,7 @@ export default function Dashboard() {
       return getDateScore(b.renDate) - getDateScore(a.renDate);
     });
 
-  // Top Indicators: Direct check with student's current Sheet1 Renewal Date
+  // Top Indicators
   const expiredCount = students.filter((s) => {
     if (s.status !== "Active") return false;
     return getRenewalAlertStatus(s.renDate, s.status) === "EXPIRED";
@@ -1032,7 +1043,7 @@ export default function Dashboard() {
                       <p className="text-[11px] font-bold tracking-widest uppercase opacity-90">TOTAL COLLECTION (LEDGER)</p>
                       <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-bold">Lifetime</span>
                     </div>
-                    <p className="text-4xl font-black mt-2 tracking-tight">₹{totalCombinedIncome.toLocaleString("en-IN")}</p>
+                    <p className="text-4xl font-black mt-2 tracking-tight">{totalCombinedIncome.toLocaleString("en-IN")}</p>
                   </div>
 
                   <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs font-semibold">
@@ -1312,7 +1323,7 @@ export default function Dashboard() {
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleQuickToggleStatus(st);
+                                    setStudentToToggleStatus(st);
                                   }}
                                   title="Click to toggle Active / Inactive"
                                   className={
@@ -1340,9 +1351,10 @@ export default function Dashboard() {
                                     <span>⚡</span> Renew
                                   </button>
 
+                                  {/* LEAVE / RE-JOIN WITH POPUP CONFIRMATION */}
                                   <button
-                                    onClick={() => handleQuickToggleStatus(st)}
-                                    title={st.status === "Active" ? "Mark Inactive" : "Mark Active"}
+                                    onClick={() => setStudentToToggleStatus(st)}
+                                    title={st.status === "Active" ? "Mark Inactive / Leave" : "Mark Active / Re-join"}
                                     className={
                                       "px-2 py-1 rounded-md text-[10px] font-bold transition shadow-sm " +
                                       (st.status === "Active"
@@ -1527,6 +1539,215 @@ export default function Dashboard() {
         </main>
       </div>
 
+      {/* RENEWAL MODAL */}
+      {studentToRenew && (
+        <div
+          onClick={() => {
+            if (!showRenewConfirmModal) setStudentToRenew(null);
+          }}
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white border border-[#cad5e2] rounded-2xl w-full max-w-md shadow-2xl p-5 space-y-4"
+          >
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-extrabold text-neutral-900 text-sm">⚡ Student Membership Renewal</h3>
+              <button onClick={() => setStudentToRenew(null)} className="text-neutral-400 font-bold text-xs">✕</button>
+            </div>
+            <form onSubmit={handlePreSubmitRenew} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-[10px] font-bold text-neutral-600 uppercase mb-1">Select Plan</label>
+                <select
+                  value={renewFormData.plan}
+                  onChange={(e) => {
+                    const p = e.target.value;
+                    const fee = PLAN_FEE_RATES[p] ?? 1200;
+                    setRenewFormData({ ...renewFormData, plan: p, feePaid: fee, newRenDate: calculateRenewalDateFromBase(renewFormData.startDate, p) });
+                  }}
+                  className="w-full bg-neutral-50 border p-2 rounded-lg font-bold cursor-pointer"
+                >
+                  <option value="6hrs/Month">6hrs/Month</option>
+                  <option value="1 Month">1 Month</option>
+                  <option value="3 Month">3 Month</option>
+                  <option value="6 Month">6 Month</option>
+                  <option value="9 Month">9 Month</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-neutral-600 uppercase mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={renewFormData.startDate}
+                    onChange={(e) => setRenewFormData({ ...renewFormData, startDate: e.target.value, newRenDate: calculateRenewalDateFromBase(e.target.value, renewFormData.plan) })}
+                    className="w-full bg-neutral-50 border p-1.5 rounded-lg font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-neutral-600 uppercase mb-1">New Renewal Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={renewFormData.newRenDate}
+                    onChange={(e) => setRenewFormData({ ...renewFormData, newRenDate: e.target.value })}
+                    className="w-full bg-neutral-50 border p-1.5 rounded-lg font-bold"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-neutral-600 uppercase mb-1">Fee Amount (₹)</label>
+                  <input
+                    type="number"
+                    value={renewFormData.feePaid}
+                    onChange={(e) => setRenewFormData({ ...renewFormData, feePaid: e.target.value })}
+                    className="w-full bg-neutral-50 border p-2 rounded-lg font-black text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-neutral-600 uppercase mb-1">Payment Mode</label>
+                  <select
+                    value={renewFormData.payMode}
+                    onChange={(e) => setRenewFormData({ ...renewFormData, payMode: e.target.value })}
+                    className="w-full bg-neutral-50 border p-2 rounded-lg font-bold cursor-pointer"
+                  >
+                    <option value="Cash">Cash</option>
+                    <option value="UPI / QR">UPI / QR</option>
+                    <option value="Bank Transfer">Bank Transfer</option>
+                  </select>
+                </div>
+              </div>
+              <div className="pt-2 flex justify-end gap-2 border-t">
+                <button type="button" onClick={() => setStudentToRenew(null)} className="px-4 py-2 border rounded-lg font-bold">Cancel</button>
+                <button type="submit" className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-black transition">
+                  Review & Confirm ➔
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* NEW: RENEWAL REVIEW & CONFIRMATION POPUP */}
+      {showRenewConfirmModal && studentToRenew && (
+        <div
+          onClick={() => setShowRenewConfirmModal(false)}
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-in fade-in duration-150"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white border border-emerald-300 rounded-2xl w-full max-w-sm p-5 shadow-2xl space-y-4 text-xs font-sans"
+          >
+            <div className="flex items-center gap-2.5 border-b pb-3">
+              <span className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-black text-base">
+                ✓
+              </span>
+              <div>
+                <h3 className="font-extrabold text-neutral-900 text-sm">Confirm Renewal Details</h3>
+                <p className="text-[10px] text-neutral-500">Please review before saving to database</p>
+              </div>
+            </div>
+
+            <div className="bg-[#f4faf6] border border-[#d2edd9] rounded-xl p-3.5 space-y-2 text-neutral-800">
+              <div className="flex justify-between border-b border-emerald-100 pb-1.5">
+                <span className="font-bold text-neutral-500 uppercase text-[10px]">Student Name:</span>
+                <span className="font-black text-neutral-900">{studentToRenew.name}</span>
+              </div>
+              <div className="flex justify-between border-b border-emerald-100 pb-1.5">
+                <span className="font-bold text-neutral-500 uppercase text-[10px]">Selected Plan:</span>
+                <span className="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  {renewFormData.plan}
+                </span>
+              </div>
+              <div className="flex justify-between border-b border-emerald-100 pb-1.5">
+                <span className="font-bold text-neutral-500 uppercase text-[10px]">Renewal Period:</span>
+                <span className="font-bold text-neutral-900">
+                  {formatDateToDDMMYYYY(renewFormData.startDate)} ➔ <b className="text-red-600">{formatDateToDDMMYYYY(renewFormData.newRenDate)}</b>
+                </span>
+              </div>
+              <div className="flex justify-between border-b border-emerald-100 pb-1.5">
+                <span className="font-bold text-neutral-500 uppercase text-[10px]">Fee Amount:</span>
+                <span className="font-black text-base text-emerald-700">₹{renewFormData.feePaid}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-bold text-neutral-500 uppercase text-[10px]">Payment Mode:</span>
+                <span className="font-bold text-neutral-900">{renewFormData.payMode}</span>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowRenewConfirmModal(false)}
+                className="flex-1 py-2 border border-neutral-300 rounded-lg font-bold text-neutral-700 hover:bg-neutral-100 transition"
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={handleFinalConfirmRenew}
+                className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-black transition shadow-md shadow-emerald-600/20"
+              >
+                {isSubmitting ? "Updating..." : "✓ Confirm & Update"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NEW: LEAVE / RE-JOIN STATUS TOGGLE CONFIRMATION POPUP */}
+      {studentToToggleStatus && (
+        <div
+          onClick={() => setStudentToToggleStatus(null)}
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-150"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white border rounded-2xl w-full max-w-xs p-5 shadow-2xl text-center space-y-3 font-sans"
+          >
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto text-xl font-bold ${
+              studentToToggleStatus.status === "Active" ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"
+            }`}>
+              {studentToToggleStatus.status === "Active" ? "⚠️" : "⚡"}
+            </div>
+            <h3 className="font-black text-sm text-neutral-900">
+              {studentToToggleStatus.status === "Active" ? "Confirm Member Leave?" : "Re-join Member?"}
+            </h3>
+            <p className="text-xs text-neutral-600 leading-relaxed">
+              Kya aap sach me <b>{studentToToggleStatus.name}</b> ko{" "}
+              <b className={studentToToggleStatus.status === "Active" ? "text-red-600" : "text-emerald-700"}>
+                {studentToToggleStatus.status === "Active" ? "Inactive (Leave)" : "Active (Re-join)"}
+              </b>{" "}
+              mark karna chahte hain?
+              {studentToToggleStatus.status === "Active" && (
+                <span className="block text-[10px] text-neutral-400 mt-1">
+                  (Seat un-allot ho kar Free ho jayegi)
+                </span>
+              )}
+            </p>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => setStudentToToggleStatus(null)}
+                className="flex-1 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg font-bold text-xs transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={executeToggleStatus}
+                className={`flex-1 py-2 text-white rounded-lg font-black text-xs transition shadow ${
+                  studentToToggleStatus.status === "Active" ? "bg-amber-600 hover:bg-amber-700" : "bg-blue-600 hover:bg-blue-700"
+                }`}
+              >
+                {studentToToggleStatus.status === "Active" ? "Yes, Mark Leave" : "Yes, Re-join"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* STUDENT PROFILE MODAL - FIXED PERMANENT ADMISSION DATE */}
       {viewStudent && (
         <div
@@ -1576,7 +1797,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* RECEIPTS LEDGER MODAL - LATEST ON TOP */}
+      {/* RECEIPTS LEDGER MODAL - LATEST TRANSITION TOP PAR */}
       {viewHistoryStudent && (
         <div
           onClick={() => setViewHistoryStudent(null)}
