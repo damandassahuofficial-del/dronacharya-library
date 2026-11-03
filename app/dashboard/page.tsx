@@ -127,89 +127,108 @@ export default function Dashboard() {
   };
   const [formData, setFormData] = useState<Student>(initialForm);
 
-  // 1. UNIVERSAL TIMESTAMP PARSER: Parses DD/MM/YYYY, D/M/YYYY, YYYY-MM-DD
-  const getExactTimestamp = (dateStr: any): number => {
-    if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return 0;
-    const s = String(dateStr).trim();
-
-    // DD/MM/YYYY or D/M/YYYY
-    if (s.includes("/")) {
-      const clean = s.split("T")[0].split(" ")[0];
-      const parts = clean.split("/");
-      if (parts.length === 3) {
-        if (parts[2].length === 4) {
-          const d = parseInt(parts[0], 10);
-          const m = parseInt(parts[1], 10) - 1;
-          const y = parseInt(parts[2], 10);
-          const dt = new Date(y, m, d);
-          if (!isNaN(dt.getTime())) return dt.getTime();
-        } else if (parts[0].length === 4) {
-          const y = parseInt(parts[0], 10);
-          const m = parseInt(parts[1], 10) - 1;
-          const d = parseInt(parts[2], 10);
-          const dt = new Date(y, m, d);
-          if (!isNaN(dt.getTime())) return dt.getTime();
-        }
-      }
-    }
-
-    // YYYY-MM-DD or DD-MM-YYYY
-    if (s.includes("-")) {
-      const clean = s.split("T")[0].split(" ")[0];
-      const parts = clean.split("-");
-      if (parts.length === 3) {
-        if (parts[0].length === 4) {
-          const y = parseInt(parts[0], 10);
-          const m = parseInt(parts[1], 10) - 1;
-          const d = parseInt(parts[2], 10);
-          const dt = new Date(y, m, d);
-          if (!isNaN(dt.getTime())) return dt.getTime();
-        } else if (parts[2].length === 4) {
-          const d = parseInt(parts[0], 10);
-          const m = parseInt(parts[1], 10) - 1;
-          const y = parseInt(parts[2], 10);
-          const dt = new Date(y, m, d);
-          if (!isNaN(dt.getTime())) return dt.getTime();
-        }
-      }
-    }
-
-    // Fallback native parse
-    const nativeDt = new Date(s);
-    if (!isNaN(nativeDt.getTime())) return nativeDt.getTime();
-
-    return 0;
-  };
-
-  // CLEAN DD/MM/YYYY DISPLAY
+  // Exact Clean DD/MM/YYYY Output Formatter
   const formatDateToDDMMYYYY = (dateStr: any): string => {
     if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return "-";
-    const ts = getExactTimestamp(dateStr);
-    if (!ts) return String(dateStr).trim().split("T")[0].split(" ")[0];
+    const raw = String(dateStr).trim();
+    const cleanStr = raw.split("T")[0].split(" ")[0].trim();
 
-    const d = new Date(ts);
-    const day = String(d.getDate()).padStart(2, "0");
-    const month = String(d.getMonth() + 1).padStart(2, "0");
-    const year = d.getFullYear();
-    return `${day}/${month}/${year}`;
+    if (cleanStr.includes("/")) {
+      const parts = cleanStr.split("/");
+      if (parts.length === 3) {
+        if (parts[2].length === 4) {
+          return `${parts[0].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[2]}`;
+        } else if (parts[0].length === 4) {
+          return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`;
+        }
+      }
+    }
+
+    if (cleanStr.includes("-")) {
+      const parts = cleanStr.split("-");
+      if (parts.length === 3) {
+        if (parts[0].length === 4) {
+          return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`;
+        } else {
+          return `${parts[0].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[2]}`;
+        }
+      }
+    }
+
+    try {
+      const d = new Date(raw);
+      if (!isNaN(d.getTime())) {
+        const day = String(d.getDate()).padStart(2, "0");
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const year = d.getFullYear();
+        return `${day}/${month}/${year}`;
+      }
+    } catch (e) {}
+
+    return cleanStr;
   };
 
   const formatToInputDate = (dateStr: any): string => {
     if (!dateStr || dateStr === "-") return "";
-    const ts = getExactTimestamp(dateStr);
-    if (!ts) return "";
-    const d = new Date(ts);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const raw = String(dateStr).trim();
+    const cleanStr = raw.split("T")[0].split(" ")[0].trim();
+
+    if (cleanStr.includes("/")) {
+      const parts = cleanStr.split("/");
+      if (parts.length === 3) {
+        if (parts[2].length === 4) {
+          return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+        }
+      }
+    }
+
+    if (cleanStr.includes("-")) {
+      const parts = cleanStr.split("-");
+      if (parts.length === 3) {
+        if (parts[0].length === 4) return cleanStr;
+        return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+      }
+    }
+
+    try {
+      const d = new Date(raw);
+      if (!isNaN(d.getTime())) {
+        return d.toISOString().slice(0, 10);
+      }
+    } catch (e) {}
+
+    return "";
   };
 
   const calculateRenewalDateFromBase = (baseDateStr: string, planStr: string): string => {
     if (!baseDateStr || baseDateStr === "-") return "";
-    const ts = getExactTimestamp(baseDateStr);
-    const baseDate = ts ? new Date(ts) : new Date();
+    let cleanStr = String(baseDateStr).trim().split("T")[0].split(" ")[0];
 
-    let y = baseDate.getFullYear();
-    let m = baseDate.getMonth() + 1;
-    let d = baseDate.getDate();
+    let y = 0, m = 0, d = 0;
+    if (cleanStr.includes("-")) {
+      const parts = cleanStr.split("-");
+      if (parts[0].length === 4) {
+        y = parseInt(parts[0], 10);
+        m = parseInt(parts[1], 10);
+        d = parseInt(parts[2], 10);
+      } else {
+        d = parseInt(parts[0], 10);
+        m = parseInt(parts[1], 10);
+        y = parseInt(parts[2], 10);
+      }
+    } else if (cleanStr.includes("/")) {
+      const parts = cleanStr.split("/");
+      d = parseInt(parts[0], 10);
+      m = parseInt(parts[1], 10);
+      y = parseInt(parts[2], 10);
+    }
+
+    if (!y || !m || !d || isNaN(y) || isNaN(m) || isNaN(d)) {
+      const now = new Date();
+      y = now.getFullYear();
+      m = now.getMonth() + 1;
+      d = now.getDate();
+    }
 
     let monthsToAdd = 1;
     if (planStr.includes("3 Month")) monthsToAdd = 3;
@@ -231,7 +250,55 @@ export default function Dashboard() {
     return `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(finalDay).padStart(2, "0")}`;
   };
 
-  // 2. ACCURATE RENEWAL ALERT STATUS (CALCULATES ROW COLOR & LIVE BADGES)
+  // Convert Date to Number (YYYYMMDD) for accurate sorting & status check
+  const getDateScore = (dateStr: any): number => {
+    if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return 0;
+    const s = String(dateStr).trim().split("T")[0].split(" ")[0];
+
+    if (s.includes("/")) {
+      const parts = s.split("/");
+      if (parts.length === 3) {
+        if (parts[2].length === 4) {
+          return parseInt(`${parts[2]}${parts[1].padStart(2, "0")}${parts[0].padStart(2, "0")}`, 10) || 0;
+        } else if (parts[0].length === 4) {
+          return parseInt(`${parts[0]}${parts[1].padStart(2, "0")}${parts[2].padStart(2, "0")}`, 10) || 0;
+        }
+      }
+    }
+
+    if (s.includes("-")) {
+      const parts = s.split("-");
+      if (parts.length === 3) {
+        if (parts[0].length === 4) {
+          return parseInt(`${parts[0]}${parts[1].padStart(2, "0")}${parts[2].padStart(2, "0")}`, 10) || 0;
+        } else if (parts[2].length === 4) {
+          return parseInt(`${parts[2]}${parts[1].padStart(2, "0")}${parts[0].padStart(2, "0")}`, 10) || 0;
+        }
+      }
+    }
+
+    try {
+      const d = new Date(s);
+      if (!isNaN(d.getTime())) {
+        return parseInt(`${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`, 10) || 0;
+      }
+    } catch (e) {}
+
+    return 0;
+  };
+
+  // Safe epoch timestamp for exact date math
+  const getExactTimestamp = (dateStr: any): number => {
+    const score = getDateScore(dateStr);
+    if (!score) return 0;
+    const s = String(score);
+    const y = parseInt(s.substring(0, 4), 10);
+    const m = parseInt(s.substring(4, 6), 10) - 1;
+    const d = parseInt(s.substring(6, 8), 10);
+    return new Date(y, m, d).getTime();
+  };
+
+  // Accurate renewal alert status
   const getRenewalAlertStatus = (
     renDateStr: string,
     status: string
@@ -244,11 +311,7 @@ export default function Dashboard() {
     today.setHours(0, 0, 0, 0);
     const todayTs = today.getTime();
 
-    const renDateObj = new Date(renTs);
-    renDateObj.setHours(0, 0, 0, 0);
-    const normalizedRenTs = renDateObj.getTime();
-
-    const diffDays = Math.ceil((normalizedRenTs - todayTs) / (1000 * 60 * 60 * 24));
+    const diffDays = Math.ceil((renTs - todayTs) / (1000 * 60 * 60 * 24));
 
     if (diffDays < 0) return "EXPIRED";
     if (diffDays === 0) return "TODAY";
@@ -327,7 +390,7 @@ export default function Dashboard() {
     setFormData((prev) => ({ ...prev, selectedSeatNum: seatNum, seatNo: `${row}-${seatNum}` }));
   };
 
-  // COMPILED HISTORY: SORTED DESCENDING (NEWEST TRANSACTION AT TOP)
+  // COMPILED HISTORY: Guaranteed latest transaction at index 0 (Top)
   const getCompiledHistoryForStudent = (st: Student): RenewalLog[] => {
     const rawLogs = renewalHistory.filter(
       (h) =>
@@ -345,7 +408,7 @@ export default function Dashboard() {
     const combined: RenewalLog[] = [...rawLogs];
     if (!hasAdmissionLogged && st.admDate && st.admDate !== "-") {
       const originalFirstRenDate = calculateRenewalDateFromBase(st.admDate, st.plan || "1 Month");
-      combined.unshift({
+      combined.push({
         txId: `INIT-${st.studentId}`,
         studentId: st.studentId,
         name: st.name,
@@ -359,10 +422,11 @@ export default function Dashboard() {
       });
     }
 
+    // Sort strictly by Date Score Descending (Newest date on top)
     return combined.sort((a, b) => {
-      const tsA = Math.max(getExactTimestamp(a.newRenDate), getExactTimestamp(a.payDate));
-      const tsB = Math.max(getExactTimestamp(b.newRenDate), getExactTimestamp(b.payDate));
-      return tsB - tsA;
+      const scoreA = Math.max(getDateScore(a.payDate), getDateScore(a.newRenDate));
+      const scoreB = Math.max(getDateScore(b.payDate), getDateScore(b.newRenDate));
+      return scoreB - scoreA;
     });
   };
 
@@ -431,7 +495,7 @@ export default function Dashboard() {
         body: formBody.toString(),
       });
 
-      // Update state: Admission date remains frozen, renewal date updates
+      // Update state: Admission Date freeze rahegi, Renewal Date update hogi
       setStudents((prev) =>
         prev.map((s) =>
           s.rowIndex === studentToRenew.rowIndex
@@ -637,7 +701,7 @@ export default function Dashboard() {
     .reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
   const totalCombinedIncome = allInitialAdmissionFees + allRenewalsFees;
 
-  // 3. PRIORITY SORTING: EXPIRED -> TODAY -> WARNING <= 3 DAYS -> SAFE (ASCENDING RENEWAL DATE)
+  // ARRANGEMENT (SORTING): Active students on top, sorted by URGENCY of Renewal Date
   const filteredStudents = students
     .filter((s) => {
       const q = searchQuery.toLowerCase();
@@ -666,29 +730,30 @@ export default function Dashboard() {
       return matchesSearch && matchesStatus && matchesPlan;
     })
     .sort((a, b) => {
-      // Rule 1: Active students always above Inactive
+      // 1. Active pehle, Inactive baad mein
       if (a.status === "Active" && b.status !== "Active") return -1;
       if (a.status !== "Active" && b.status === "Active") return 1;
 
-      // Rule 2: Inactive students sorted by newest date first
+      // 2. Inactive students sorted by date
       if (a.status !== "Active" && b.status !== "Active") {
-        return getExactTimestamp(b.renDate) - getExactTimestamp(a.renDate);
+        return getDateScore(b.renDate) - getDateScore(a.renDate);
       }
 
-      // Rule 3: Active students sorted by Urgency status first
-      const statusRank = { EXPIRED: 1, TODAY: 2, WARNING_3DAYS: 3, SAFE: 4 };
-      const rankA = statusRank[getRenewalAlertStatus(a.renDate, a.status)];
-      const rankB = statusRank[getRenewalAlertStatus(b.renDate, b.status)];
+      // 3. Active students: Urgency priority
+      // EXPIRED (1) -> TODAY (2) -> WARNING <= 3 DAYS (3) -> SAFE (4)
+      const rank = { EXPIRED: 1, TODAY: 2, WARNING_3DAYS: 3, SAFE: 4 };
+      const rankA = rank[getRenewalAlertStatus(a.renDate, a.status)];
+      const rankB = rank[getRenewalAlertStatus(b.renDate, b.status)];
 
       if (rankA !== rankB) {
-        return rankA - rankB; // Expired (1) -> Today (2) -> Warning (3) -> Safe (4)
+        return rankA - rankB;
       }
 
-      // Rule 4: Within same priority, earliest due date first
-      return getExactTimestamp(a.renDate) - getExactTimestamp(b.renDate);
+      // 4. Same priority mein jo date pehle khatam ho rahi hai wo pehle aayegi
+      return getDateScore(a.renDate) - getDateScore(b.renDate);
     });
 
-  // Top Indicators: Direct check with student's current Sheet1 Renewal Date
+  // Top Indicators
   const expiredCount = students.filter((s) => {
     if (s.status !== "Active") return false;
     return getRenewalAlertStatus(s.renDate, s.status) === "EXPIRED";
@@ -752,7 +817,7 @@ export default function Dashboard() {
   const displayActive = filteredStudents.filter((s) => s.status === "Active").length;
   const displayInactive = displayTotal - displayActive;
 
-  // History list for the modal
+  // History list for the modal (Latest on top)
   const historyStudentLogs = viewHistoryStudent
     ? getCompiledHistoryForStudent(viewHistoryStudent)
     : [];
@@ -1158,7 +1223,7 @@ export default function Dashboard() {
                           const alertStatus = getRenewalAlertStatus(st.renDate, st.status);
                           const isRenewedMember = st.status === "Active" && hasStudentRenewed(st);
 
-                          // 4. ACCURATE ROW BACKGROUND COLORING
+                          // ROW COLORING LOGIC
                           let rowColorClass = "";
                           if (st.status !== "Active") {
                             rowColorClass = "bg-[#eee9dc]/80 opacity-60 hover:opacity-100 hover:bg-[#e4ded0]";
