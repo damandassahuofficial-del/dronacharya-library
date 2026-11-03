@@ -98,7 +98,6 @@ export default function Dashboard() {
   const [approvingApplicant, setApprovingApplicant] = useState<PendingApplicant | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Approval Modal Form Data
   const [approvalFormData, setApprovalFormData] = useState({
     plan: "1 Month",
     monthlyFee: 1200,
@@ -159,64 +158,96 @@ export default function Dashboard() {
   };
   const [formData, setFormData] = useState<Student>(initialForm);
 
-  // Clean date helper - Removes any time or timestamp string strictly
-  const formatDateToDDMMYYYY = (dateStr: string): string => {
+  // SAFE DATE FORMATTER: Timing ko 100% remove karega aur pure DD/MM/YYYY banayega
+  const formatDateToDDMMYYYY = (dateStr: any): string => {
     if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return "-";
-    // Strip time part (T..., GMT..., spaces)
-    let s = String(dateStr).trim().split("T")[0].split(" ")[0];
+    const raw = String(dateStr).trim();
 
-    if (s.includes("/")) {
-      const parts = s.split("/");
-      if (parts.length === 3) {
-        if (parts[2].length === 4) {
-          return `${parts[0].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[2]}`;
-        } else if (parts[0].length === 4) {
-          return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`;
-        }
-      }
-    }
+    // Agar date me time hai (T ya space), toh sirf pehla hissa le lo
+    const cleanStr = raw.split("T")[0].split(" ")[0].trim();
 
-    if (s.includes("-")) {
-      const parts = s.split("-");
+    // 1. Agar YYYY-MM-DD ya DD-MM-YYYY format hai
+    if (cleanStr.includes("-")) {
+      const parts = cleanStr.split("-");
       if (parts.length === 3) {
         if (parts[0].length === 4) {
+          // YYYY-MM-DD -> DD/MM/YYYY
           return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`;
         } else {
-          return `${parts[0].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[2]}`;
+          // DD-MM-YYYY -> DD/MM/YYYY
+          return `${parts[0].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[2].slice(0, 4)}`;
         }
       }
     }
-    return s;
+
+    // 2. Agar DD/MM/YYYY ya YYYY/MM/DD format hai
+    if (cleanStr.includes("/")) {
+      const parts = cleanStr.split("/");
+      if (parts.length === 3) {
+        if (parts[2].length === 4) {
+          // Already DD/MM/YYYY
+          return `${parts[0].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[2]}`;
+        } else if (parts[0].length === 4) {
+          // YYYY/MM/DD -> DD/MM/YYYY
+          return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`;
+        }
+      }
+    }
+
+    // 3. Fallback: JS Date parse
+    try {
+      const d = new Date(raw);
+      if (!isNaN(d.getTime())) {
+        const day = String(d.getDate()).padStart(2, "0");
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const year = d.getFullYear();
+        return `${day}/${month}/${year}`;
+      }
+    } catch (e) {}
+
+    return cleanStr;
   };
 
-  const formatToInputDate = (dateStr: string): string => {
+  // Input fields (type="date") ke liye YYYY-MM-DD
+  const formatToInputDate = (dateStr: any): string => {
     if (!dateStr || dateStr === "-") return "";
-    let s = String(dateStr).trim().split("T")[0].split(" ")[0];
-    if (s.includes("/")) {
-      const parts = s.split("/");
+    const raw = String(dateStr).trim();
+    const cleanStr = raw.split("T")[0].split(" ")[0].trim();
+
+    if (cleanStr.includes("-")) {
+      const parts = cleanStr.split("-");
+      if (parts.length === 3) {
+        if (parts[0].length === 4) return cleanStr;
+        return `${parts[2].slice(0, 4)}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+      }
+    }
+
+    if (cleanStr.includes("/")) {
+      const parts = cleanStr.split("/");
       if (parts.length === 3) {
         if (parts[2].length === 4) {
           return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
         }
       }
     }
-    if (s.includes("-")) {
-      const parts = s.split("-");
-      if (parts.length === 3) {
-        if (parts[0].length === 4) return s;
-        return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+
+    try {
+      const d = new Date(raw);
+      if (!isNaN(d.getTime())) {
+        return d.toISOString().slice(0, 10);
       }
-    }
+    } catch (e) {}
+
     return "";
   };
 
   const calculateRenewalDateFromBase = (baseDateStr: string, planStr: string): string => {
     if (!baseDateStr || baseDateStr === "-") return "";
-    let s = String(baseDateStr).trim().split("T")[0].split(" ")[0];
+    let cleanStr = String(baseDateStr).trim().split("T")[0].split(" ")[0];
 
     let y = 0, m = 0, d = 0;
-    if (s.includes("-")) {
-      const parts = s.split("-");
+    if (cleanStr.includes("-")) {
+      const parts = cleanStr.split("-");
       if (parts[0].length === 4) {
         y = parseInt(parts[0], 10);
         m = parseInt(parts[1], 10);
@@ -226,8 +257,8 @@ export default function Dashboard() {
         m = parseInt(parts[1], 10);
         y = parseInt(parts[2], 10);
       }
-    } else if (s.includes("/")) {
-      const parts = s.split("/");
+    } else if (cleanStr.includes("/")) {
+      const parts = cleanStr.split("/");
       d = parseInt(parts[0], 10);
       m = parseInt(parts[1], 10);
       y = parseInt(parts[2].slice(0, 4), 10);
@@ -262,17 +293,17 @@ export default function Dashboard() {
 
   const parseDateToTimestamp = (dateStr: string): number => {
     if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return 9999999999999;
-    let s = String(dateStr).trim().split("T")[0].split(" ")[0];
+    let cleanStr = String(dateStr).trim().split("T")[0].split(" ")[0];
 
-    if (s.includes("/")) {
-      const parts = s.split("/");
+    if (cleanStr.includes("/")) {
+      const parts = cleanStr.split("/");
       if (parts.length === 3) {
         return new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10)).getTime();
       }
     }
 
-    if (s.includes("-")) {
-      const parts = s.split("-");
+    if (cleanStr.includes("-")) {
+      const parts = cleanStr.split("-");
       if (parts.length === 3) {
         if (parts[0].length === 4) {
           return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10)).getTime();
@@ -281,7 +312,7 @@ export default function Dashboard() {
         }
       }
     }
-    const t = new Date(s).getTime();
+    const t = new Date(cleanStr).getTime();
     return isNaN(t) ? 9999999999999 : t;
   };
 
@@ -425,14 +456,14 @@ export default function Dashboard() {
     if (compiled.length > 0) {
       const latest = compiled[0];
       return {
-        startDate: latest.oldRenDate,
-        endDate: latest.newRenDate,
+        startDate: latest.oldRenDate || st.admDate,
+        endDate: latest.newRenDate || st.renDate,
         plan: latest.plan || st.plan,
       };
     }
     return {
-      startDate: formatDateToDDMMYYYY(st.admDate),
-      endDate: formatDateToDDMMYYYY(st.renDate),
+      startDate: st.admDate,
+      endDate: st.renDate,
       plan: st.plan || "1 Month",
     };
   };
@@ -819,7 +850,6 @@ export default function Dashboard() {
     .reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
   const totalCombinedIncome = allInitialAdmissionFees + allRenewalsFees;
 
-  // Sorting: Active students first, expired/due first within active
   const filteredStudents = students
     .filter((s) => {
       const q = searchQuery.toLowerCase();
@@ -857,7 +887,6 @@ export default function Dashboard() {
       return parseDateToTimestamp(b.renDate) - parseDateToTimestamp(a.renDate);
     });
 
-  // Accurate Counts for Top Indicators
   const expiredCount = students.filter(
     (s) => s.status === "Active" && getRenewalAlertStatus(s.renDate, s.status) === "EXPIRED"
   ).length;
@@ -1086,7 +1115,6 @@ export default function Dashboard() {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Direct Add Student Button - Opens Original Detailed Form */}
             <button
               onClick={() => {
                 const today = new Date().toISOString().slice(0, 10);
@@ -1339,7 +1367,6 @@ export default function Dashboard() {
 
           {activeMenu === "Students" && (
             <div className="flex-1 flex flex-col h-full overflow-hidden space-y-3">
-              {/* TOP HEADER CONTROLS WITH LIVE INDICATOR COUNT BADGES RESTORED */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 flex-shrink-0">
                 <div className="flex flex-wrap items-center gap-2 flex-1">
                   <div className="relative flex-1 min-w-[180px] max-w-xs">
@@ -1379,7 +1406,7 @@ export default function Dashboard() {
                     <option>9 Month</option>
                   </select>
 
-                  {/* TOP LIVE COLOR INDICATOR BADGES RESTORED WITH EXACT COUNT */}
+                  {/* TOP LIVE INDICATOR BADGES RESTORED */}
                   <div className="flex items-center gap-2 text-[10px] font-bold px-3 py-1 bg-white/90 border border-[#e3dccb] rounded-lg shadow-sm">
                     <span className="flex items-center gap-1.5 text-rose-800">
                       <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-sm animate-pulse"></span>
@@ -1514,7 +1541,7 @@ export default function Dashboard() {
                                 )}
                               </td>
 
-                              {/* CURRENT MEMBERSHIP PERIOD - CLEAN DATES WITHOUT TIMESTAMPS */}
+                              {/* CURRENT MEMBERSHIP PERIOD: Proper Dates */}
                               <td className="py-3 px-4 space-y-0.5">
                                 <p className="font-bold text-neutral-900">
                                   {activePeriod.plan}
