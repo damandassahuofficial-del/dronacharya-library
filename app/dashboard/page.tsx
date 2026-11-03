@@ -158,7 +158,7 @@ export default function Dashboard() {
   };
   const [formData, setFormData] = useState<Student>(initialForm);
 
-  // Clean DD/MM/YYYY Output
+  // Robust DD/MM/YYYY Output Formatter
   const formatDateToDDMMYYYY = (dateStr: any): string => {
     if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return "-";
     const raw = String(dateStr).trim();
@@ -251,7 +251,7 @@ export default function Dashboard() {
       const parts = cleanStr.split("/");
       d = parseInt(parts[0], 10);
       m = parseInt(parts[1], 10);
-      y = parseInt(parts[2].slice(0, 4), 10);
+      y = parseInt(parts[2], 10);
     }
 
     if (!y || !m || !d || isNaN(y) || isNaN(m) || isNaN(d)) {
@@ -281,7 +281,7 @@ export default function Dashboard() {
     return `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(finalDay).padStart(2, "0")}`;
   };
 
-  // Precise Timestamp Calculator for Accurate Sorting
+  // Safe Timestamp Parser (Never returns NaN)
   const parseDateToTimestamp = (dateStr: any): number => {
     if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return 0;
     const s = String(dateStr).trim().split("T")[0].split(" ")[0];
@@ -413,7 +413,7 @@ export default function Dashboard() {
     setFormData((prev) => ({ ...prev, selectedSeatNum: seatNum, seatNo: `${row}-${seatNum}` }));
   };
 
-  // NEWEST/LATEST RECEIPT AT TOP (INDEX 0)
+  // GUARANTEED: NEWEST TRANSACTION ON TOP (DESCENDING BY DATE)
   const getCompiledHistoryForStudent = (st: Student): RenewalLog[] => {
     const rawLogs = renewalHistory.filter(
       (h) =>
@@ -445,15 +445,15 @@ export default function Dashboard() {
       });
     }
 
-    // Sort strictly by latest payment date / renewal date (Descending: latest first)
+    // Exact numeric descending sort (Latest date first)
     return combined.sort((a, b) => {
-      const tsA = Math.max(parseDateToTimestamp(a.newRenDate), parseDateToTimestamp(a.payDate));
-      const tsB = Math.max(parseDateToTimestamp(b.newRenDate), parseDateToTimestamp(b.payDate));
-      return tsB - tsA;
+      const dateA = Math.max(parseDateToTimestamp(a.payDate) || 0, parseDateToTimestamp(a.newRenDate) || 0);
+      const dateB = Math.max(parseDateToTimestamp(b.payDate) || 0, parseDateToTimestamp(b.newRenDate) || 0);
+      return dateB - dateA;
     });
   };
 
-  // Student Directory & Profile ke liye latest active period
+  // Student Directory & Modal ke liye Latest Active Period
   const getLatestActivePeriodForStudent = (st: Student) => {
     const compiled = getCompiledHistoryForStudent(st);
     if (compiled.length > 0) {
@@ -2102,7 +2102,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* STUDENT PROFILE MODAL - PROPER GREEN DATES */}
+      {/* STUDENT PROFILE MODAL - CLEAN PROPER DATES */}
       {viewStudent && (
         <div
           onClick={() => setViewStudent(null)}
