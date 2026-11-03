@@ -158,7 +158,7 @@ export default function Dashboard() {
   };
   const [formData, setFormData] = useState<Student>(initialForm);
 
-  // Robust DD/MM/YYYY Output Formatter
+  // Exact Clean Date Formatter (DD/MM/YYYY)
   const formatDateToDDMMYYYY = (dateStr: any): string => {
     if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return "-";
     const raw = String(dateStr).trim();
@@ -251,7 +251,7 @@ export default function Dashboard() {
       const parts = cleanStr.split("/");
       d = parseInt(parts[0], 10);
       m = parseInt(parts[1], 10);
-      y = parseInt(parts[2], 10);
+      y = parseInt(parts[2].slice(0, 4), 10);
     }
 
     if (!y || !m || !d || isNaN(y) || isNaN(m) || isNaN(d)) {
@@ -281,39 +281,36 @@ export default function Dashboard() {
     return `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(finalDay).padStart(2, "0")}`;
   };
 
-  // Safe Timestamp Parser (Never returns NaN)
-  const parseDateToTimestamp = (dateStr: any): number => {
+  // 100% BULLETPROOF NUMERIC DATE COMPARATOR (YYYYMMDD) - NEVER FAILS OR RETURNS NAN
+  const getDateNumericScore = (dateStr: any): number => {
     if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return 0;
     const s = String(dateStr).trim().split("T")[0].split(" ")[0];
 
+    // DD/MM/YYYY
     if (s.includes("/")) {
       const parts = s.split("/");
       if (parts.length === 3) {
         if (parts[2].length === 4) {
-          const dt = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
-          if (!isNaN(dt.getTime())) return dt.getTime();
+          return parseInt(parts[2] + parts[1].padStart(2, "0") + parts[0].padStart(2, "0"), 10) || 0;
         } else if (parts[0].length === 4) {
-          const dt = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-          if (!isNaN(dt.getTime())) return dt.getTime();
+          return parseInt(parts[0] + parts[1].padStart(2, "0") + parts[2].padStart(2, "0"), 10) || 0;
         }
       }
     }
 
+    // YYYY-MM-DD or DD-MM-YYYY
     if (s.includes("-")) {
       const parts = s.split("-");
       if (parts.length === 3) {
         if (parts[0].length === 4) {
-          const dt = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-          if (!isNaN(dt.getTime())) return dt.getTime();
-        } else {
-          const dt = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
-          if (!isNaN(dt.getTime())) return dt.getTime();
+          return parseInt(parts[0] + parts[1].padStart(2, "0") + parts[2].padStart(2, "0"), 10) || 0;
+        } else if (parts[2].length === 4) {
+          return parseInt(parts[2] + parts[1].padStart(2, "0") + parts[0].padStart(2, "0"), 10) || 0;
         }
       }
     }
 
-    const t = new Date(s).getTime();
-    return isNaN(t) ? 0 : t;
+    return 0;
   };
 
   const getRenewalAlertStatus = (
@@ -321,22 +318,35 @@ export default function Dashboard() {
     status: string
   ): "EXPIRED" | "TODAY" | "WARNING_3DAYS" | "SAFE" => {
     if (status !== "Active" || !renDateStr || renDateStr === "-") return "SAFE";
-    const renTs = parseDateToTimestamp(renDateStr);
-    if (!renTs) return "SAFE";
+    const renScore = getDateNumericScore(renDateStr);
+    if (!renScore) return "SAFE";
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayTs = today.getTime();
+    const now = new Date();
+    const currentScore = parseInt(
+      `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`,
+      10
+    );
 
-    const renDateObj = new Date(renTs);
+    if (renScore < currentScore) return "EXPIRED";
+    if (renScore === currentScore) return "TODAY";
+
+    // Difference check for <= 3 days
+    const cleanStr = String(renDateStr).trim().split("T")[0].split(" ")[0];
+    const parts = cleanStr.includes("/") ? cleanStr.split("/") : cleanStr.split("-");
+    let renDateObj = new Date();
+    if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        renDateObj = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+      } else {
+        renDateObj = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+      }
+    }
+    const todayObj = new Date();
+    todayObj.setHours(0, 0, 0, 0);
     renDateObj.setHours(0, 0, 0, 0);
-    const normalizedRenTs = renDateObj.getTime();
+    const diffDays = Math.ceil((renDateObj.getTime() - todayObj.getTime()) / (1000 * 60 * 60 * 24));
 
-    const diffDays = Math.ceil((normalizedRenTs - todayTs) / (1000 * 60 * 60 * 24));
-
-    if (diffDays < 0) return "EXPIRED";
-    if (diffDays === 0) return "TODAY";
-    if (diffDays <= 3) return "WARNING_3DAYS";
+    if (diffDays <= 3 && diffDays > 0) return "WARNING_3DAYS";
     return "SAFE";
   };
 
@@ -413,7 +423,7 @@ export default function Dashboard() {
     setFormData((prev) => ({ ...prev, selectedSeatNum: seatNum, seatNo: `${row}-${seatNum}` }));
   };
 
-  // GUARANTEED: NEWEST TRANSACTION ON TOP (DESCENDING BY DATE)
+  // GUARANTEED: NEWEST / LATEST RECEIPT ALWAYS AT INDEX 0 (TOP)
   const getCompiledHistoryForStudent = (st: Student): RenewalLog[] => {
     const rawLogs = renewalHistory.filter(
       (h) =>
@@ -445,11 +455,11 @@ export default function Dashboard() {
       });
     }
 
-    // Exact numeric descending sort (Latest date first)
+    // Sort strictly by Numeric Date Score (Descending: 20261022 > 20260908 -> Latest on Top)
     return combined.sort((a, b) => {
-      const dateA = Math.max(parseDateToTimestamp(a.payDate) || 0, parseDateToTimestamp(a.newRenDate) || 0);
-      const dateB = Math.max(parseDateToTimestamp(b.payDate) || 0, parseDateToTimestamp(b.newRenDate) || 0);
-      return dateB - dateA;
+      const scoreA = Math.max(getDateNumericScore(a.payDate), getDateNumericScore(a.newRenDate));
+      const scoreB = Math.max(getDateNumericScore(b.payDate), getDateNumericScore(b.newRenDate));
+      return scoreB - scoreA;
     });
   };
 
@@ -888,9 +898,9 @@ export default function Dashboard() {
       if (a.status === "Active" && b.status === "Active") {
         const periodA = getLatestActivePeriodForStudent(a);
         const periodB = getLatestActivePeriodForStudent(b);
-        return parseDateToTimestamp(periodA.endDate) - parseDateToTimestamp(periodB.endDate);
+        return getDateNumericScore(periodA.endDate) - getDateNumericScore(periodB.endDate);
       }
-      return parseDateToTimestamp(b.renDate) - parseDateToTimestamp(a.renDate);
+      return getDateNumericScore(b.renDate) - getDateNumericScore(a.renDate);
     });
 
   // Top Indicators: Checked with Latest Renewed Period
