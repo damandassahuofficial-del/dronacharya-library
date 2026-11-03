@@ -251,7 +251,7 @@ export default function Dashboard() {
       const parts = cleanStr.split("/");
       d = parseInt(parts[0], 10);
       m = parseInt(parts[1], 10);
-      y = parseInt(parts[2].slice(0, 4), 10);
+      y = parseInt(parts[2], 10);
     }
 
     if (!y || !m || !d || isNaN(y) || isNaN(m) || isNaN(d)) {
@@ -281,7 +281,7 @@ export default function Dashboard() {
     return `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(finalDay).padStart(2, "0")}`;
   };
 
-  // 100% BULLETPROOF NUMERIC DATE COMPARATOR (YYYYMMDD) - NEVER FAILS OR RETURNS NAN
+  // Convert ANY date string into a purely numerical score YYYYMMDD
   const getDateNumericScore = (dateStr: any): number => {
     if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return 0;
     const s = String(dateStr).trim().split("T")[0].split(" ")[0];
@@ -291,9 +291,15 @@ export default function Dashboard() {
       const parts = s.split("/");
       if (parts.length === 3) {
         if (parts[2].length === 4) {
-          return parseInt(parts[2] + parts[1].padStart(2, "0") + parts[0].padStart(2, "0"), 10) || 0;
+          const yr = parts[2];
+          const mo = parts[1].padStart(2, "0");
+          const da = parts[0].padStart(2, "0");
+          return parseInt(`${yr}${mo}${da}`, 10) || 0;
         } else if (parts[0].length === 4) {
-          return parseInt(parts[0] + parts[1].padStart(2, "0") + parts[2].padStart(2, "0"), 10) || 0;
+          const yr = parts[0];
+          const mo = parts[1].padStart(2, "0");
+          const da = parts[2].padStart(2, "0");
+          return parseInt(`${yr}${mo}${da}`, 10) || 0;
         }
       }
     }
@@ -303,9 +309,15 @@ export default function Dashboard() {
       const parts = s.split("-");
       if (parts.length === 3) {
         if (parts[0].length === 4) {
-          return parseInt(parts[0] + parts[1].padStart(2, "0") + parts[2].padStart(2, "0"), 10) || 0;
+          const yr = parts[0];
+          const mo = parts[1].padStart(2, "0");
+          const da = parts[2].padStart(2, "0");
+          return parseInt(`${yr}${mo}${da}`, 10) || 0;
         } else if (parts[2].length === 4) {
-          return parseInt(parts[2] + parts[1].padStart(2, "0") + parts[0].padStart(2, "0"), 10) || 0;
+          const yr = parts[2];
+          const mo = parts[1].padStart(2, "0");
+          const da = parts[0].padStart(2, "0");
+          return parseInt(`${yr}${mo}${da}`, 10) || 0;
         }
       }
     }
@@ -330,7 +342,6 @@ export default function Dashboard() {
     if (renScore < currentScore) return "EXPIRED";
     if (renScore === currentScore) return "TODAY";
 
-    // Difference check for <= 3 days
     const cleanStr = String(renDateStr).trim().split("T")[0].split(" ")[0];
     const parts = cleanStr.includes("/") ? cleanStr.split("/") : cleanStr.split("-");
     let renDateObj = new Date();
@@ -423,7 +434,15 @@ export default function Dashboard() {
     setFormData((prev) => ({ ...prev, selectedSeatNum: seatNum, seatNo: `${row}-${seatNum}` }));
   };
 
-  // GUARANTEED: NEWEST / LATEST RECEIPT ALWAYS AT INDEX 0 (TOP)
+  // PURE SORT FUNCTION: HIGHEST DATE ON TOP
+  const sortReceiptsDescending = (logs: RenewalLog[]): RenewalLog[] => {
+    return [...logs].sort((a, b) => {
+      const scoreA = Math.max(getDateNumericScore(a.payDate), getDateNumericScore(a.newRenDate));
+      const scoreB = Math.max(getDateNumericScore(b.payDate), getDateNumericScore(b.newRenDate));
+      return scoreB - scoreA;
+    });
+  };
+
   const getCompiledHistoryForStudent = (st: Student): RenewalLog[] => {
     const rawLogs = renewalHistory.filter(
       (h) =>
@@ -455,19 +474,13 @@ export default function Dashboard() {
       });
     }
 
-    // Sort strictly by Numeric Date Score (Descending: 20261022 > 20260908 -> Latest on Top)
-    return combined.sort((a, b) => {
-      const scoreA = Math.max(getDateNumericScore(a.payDate), getDateNumericScore(a.newRenDate));
-      const scoreB = Math.max(getDateNumericScore(b.payDate), getDateNumericScore(b.newRenDate));
-      return scoreB - scoreA;
-    });
+    return sortReceiptsDescending(combined);
   };
 
-  // Student Directory & Modal ke liye Latest Active Period
   const getLatestActivePeriodForStudent = (st: Student) => {
     const compiled = getCompiledHistoryForStudent(st);
     if (compiled.length > 0) {
-      const latest = compiled[0];
+      const latest = compiled[0]; // Top one is always latest
       return {
         startDate: formatDateToDDMMYYYY(latest.oldRenDate) || formatDateToDDMMYYYY(st.admDate),
         endDate: formatDateToDDMMYYYY(latest.newRenDate) || formatDateToDDMMYYYY(st.renDate),
@@ -970,7 +983,8 @@ export default function Dashboard() {
   const displayActive = filteredStudents.filter((s) => s.status === "Active").length;
   const displayInactive = displayTotal - displayActive;
 
-  const historyStudentLogs = viewHistoryStudent ? getCompiledHistoryForStudent(viewHistoryStudent) : [];
+  // DIRECT SORT AT RENDER TIME (GUARANTEED LATEST ON TOP)
+  const historyStudentLogs = viewHistoryStudent ? sortReceiptsDescending(getCompiledHistoryForStudent(viewHistoryStudent)) : [];
   const totalPaidByHistoryStudent = historyStudentLogs.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
 
   return (
@@ -2161,7 +2175,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* RECEIPTS LEDGER MODAL - LATEST TRANSITION TOP PAR */}
+      {/* RECEIPTS LEDGER MODAL - LATEST TRANSITION TOP PAR (GUARANTEED) */}
       {viewHistoryStudent && (
         <div
           onClick={() => setViewHistoryStudent(null)}
@@ -2182,8 +2196,10 @@ export default function Dashboard() {
               </div>
               <span className="text-xs bg-emerald-200 px-2.5 py-1 rounded-full font-bold">{historyStudentLogs.length} Receipts</span>
             </div>
+
+            {/* DIRECT SORT MAP: LATEST TRANSACTION ON TOP */}
             <div className="overflow-y-auto space-y-2 flex-1 text-xs">
-              {historyStudentLogs.map((log, i) => (
+              {sortReceiptsDescending(historyStudentLogs).map((log, i) => (
                 <div key={log.txId || i} className="p-3 border rounded-xl flex justify-between items-center bg-white shadow-sm">
                   <div>
                     <span className="font-black text-emerald-700 text-sm mr-2">₹{log.amount}</span>
