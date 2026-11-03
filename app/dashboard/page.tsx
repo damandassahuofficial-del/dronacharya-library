@@ -125,72 +125,108 @@ export default function Dashboard() {
   };
   const [formData, setFormData] = useState<Student>(initialForm);
 
-  // UNIVERSAL TIMESTAMP PARSER: Parses DD/MM/YYYY, YYYY-MM-DD, and "Tue Sep 08 2026..." flawlessly
-  const getExactTimestamp = (dateStr: any): number => {
-    if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return 0;
-    const s = String(dateStr).trim();
+  // Exact Clean DD/MM/YYYY Output Formatter
+  const formatDateToDDMMYYYY = (dateStr: any): string => {
+    if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return "-";
+    const raw = String(dateStr).trim();
+    const cleanStr = raw.split("T")[0].split(" ")[0].trim();
 
-    // 1. Check DD/MM/YYYY
-    if (s.includes("/")) {
-      const clean = s.split("T")[0].split(" ")[0];
-      const parts = clean.split("/");
+    if (cleanStr.includes("/")) {
+      const parts = cleanStr.split("/");
       if (parts.length === 3) {
-        if (parts[2].length >= 4) {
-          const dt = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
-          if (!isNaN(dt.getTime())) return dt.getTime();
-        } else if (parts[0].length >= 4) {
-          const dt = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-          if (!isNaN(dt.getTime())) return dt.getTime();
+        if (parts[2].length === 4) {
+          return `${parts[0].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[2]}`;
+        } else if (parts[0].length === 4) {
+          return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`;
         }
       }
     }
 
-    // 2. Check YYYY-MM-DD
-    if (s.includes("-") && (s.includes("T") || s.split(" ")[0].split("-")[0].length === 4)) {
-      const clean = s.split("T")[0].split(" ")[0];
-      const parts = clean.split("-");
-      if (parts.length === 3 && parts[0].length === 4) {
-        const dt = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-        if (!isNaN(dt.getTime())) return dt.getTime();
+    if (cleanStr.includes("-")) {
+      const parts = cleanStr.split("-");
+      if (parts.length === 3) {
+        if (parts[0].length === 4) {
+          return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`;
+        } else {
+          return `${parts[0].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[2]}`;
+        }
       }
     }
 
-    // 3. Native parse for "Tue Sep 08 2026..." or raw date strings
-    const nativeDt = new Date(s);
-    if (!isNaN(nativeDt.getTime())) return nativeDt.getTime();
+    try {
+      const d = new Date(raw);
+      if (!isNaN(d.getTime())) {
+        const day = String(d.getDate()).padStart(2, "0");
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const year = d.getFullYear();
+        return `${day}/${month}/${year}`;
+      }
+    } catch (e) {}
 
-    return 0;
-  };
-
-  // CLEAN DD/MM/YYYY FORMATTER
-  const formatDateToDDMMYYYY = (dateStr: any): string => {
-    if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return "-";
-    const ts = getExactTimestamp(dateStr);
-    if (!ts) return String(dateStr).trim().split("T")[0].split(" ")[0];
-
-    const d = new Date(ts);
-    const day = String(d.getDate()).padStart(2, "0");
-    const month = String(d.getMonth() + 1).padStart(2, "0");
-    const year = d.getFullYear();
-    return `${day}/${month}/${year}`;
+    return cleanStr;
   };
 
   const formatToInputDate = (dateStr: any): string => {
     if (!dateStr || dateStr === "-") return "";
-    const ts = getExactTimestamp(dateStr);
-    if (!ts) return "";
-    const d = new Date(ts);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const raw = String(dateStr).trim();
+    const cleanStr = raw.split("T")[0].split(" ")[0].trim();
+
+    if (cleanStr.includes("/")) {
+      const parts = cleanStr.split("/");
+      if (parts.length === 3) {
+        if (parts[2].length === 4) {
+          return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+        }
+      }
+    }
+
+    if (cleanStr.includes("-")) {
+      const parts = cleanStr.split("-");
+      if (parts.length === 3) {
+        if (parts[0].length === 4) return cleanStr;
+        return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+      }
+    }
+
+    try {
+      const d = new Date(raw);
+      if (!isNaN(d.getTime())) {
+        return d.toISOString().slice(0, 10);
+      }
+    } catch (e) {}
+
+    return "";
   };
 
   const calculateRenewalDateFromBase = (baseDateStr: string, planStr: string): string => {
     if (!baseDateStr || baseDateStr === "-") return "";
-    const ts = getExactTimestamp(baseDateStr);
-    const baseDate = ts ? new Date(ts) : new Date();
+    let cleanStr = String(baseDateStr).trim().split("T")[0].split(" ")[0];
 
-    let y = baseDate.getFullYear();
-    let m = baseDate.getMonth() + 1;
-    let d = baseDate.getDate();
+    let y = 0, m = 0, d = 0;
+    if (cleanStr.includes("-")) {
+      const parts = cleanStr.split("-");
+      if (parts[0].length === 4) {
+        y = parseInt(parts[0], 10);
+        m = parseInt(parts[1], 10);
+        d = parseInt(parts[2], 10);
+      } else {
+        d = parseInt(parts[0], 10);
+        m = parseInt(parts[1], 10);
+        y = parseInt(parts[2], 10);
+      }
+    } else if (cleanStr.includes("/")) {
+      const parts = cleanStr.split("/");
+      d = parseInt(parts[0], 10);
+      m = parseInt(parts[1], 10);
+      y = parseInt(parts[2], 10);
+    }
+
+    if (!y || !m || !d || isNaN(y) || isNaN(m) || isNaN(d)) {
+      const now = new Date();
+      y = now.getFullYear();
+      m = now.getMonth() + 1;
+      d = now.getDate();
+    }
 
     let monthsToAdd = 1;
     if (planStr.includes("3 Month")) monthsToAdd = 3;
@@ -212,26 +248,74 @@ export default function Dashboard() {
     return `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(finalDay).padStart(2, "0")}`;
   };
 
+  const getDateScore = (dateStr: any): number => {
+    if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return 0;
+    const s = String(dateStr).trim().split("T")[0].split(" ")[0];
+
+    if (s.includes("/")) {
+      const parts = s.split("/");
+      if (parts.length === 3) {
+        if (parts[2].length === 4) {
+          return parseInt(`${parts[2]}${parts[1].padStart(2, "0")}${parts[0].padStart(2, "0")}`, 10) || 0;
+        } else if (parts[0].length === 4) {
+          return parseInt(`${parts[0]}${parts[1].padStart(2, "0")}${parts[2].padStart(2, "0")}`, 10) || 0;
+        }
+      }
+    }
+
+    if (s.includes("-")) {
+      const parts = s.split("-");
+      if (parts.length === 3) {
+        if (parts[0].length === 4) {
+          return parseInt(`${parts[0]}${parts[1].padStart(2, "0")}${parts[2].padStart(2, "0")}`, 10) || 0;
+        } else if (parts[2].length === 4) {
+          return parseInt(`${parts[2]}${parts[1].padStart(2, "0")}${parts[0].padStart(2, "0")}`, 10) || 0;
+        }
+      }
+    }
+
+    try {
+      const d = new Date(s);
+      if (!isNaN(d.getTime())) {
+        return parseInt(`${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`, 10) || 0;
+      }
+    } catch (e) {}
+
+    return 0;
+  };
+
   const getRenewalAlertStatus = (
     renDateStr: string,
     status: string
   ): "EXPIRED" | "TODAY" | "WARNING_3DAYS" | "SAFE" => {
     if (status !== "Active" || !renDateStr || renDateStr === "-") return "SAFE";
-    const renTs = getExactTimestamp(renDateStr);
-    if (!renTs) return "SAFE";
+    const renScore = getDateScore(renDateStr);
+    if (!renScore) return "SAFE";
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayTs = today.getTime();
+    const now = new Date();
+    const currentScore = parseInt(
+      `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`,
+      10
+    );
 
-    const renDateObj = new Date(renTs);
+    if (renScore < currentScore) return "EXPIRED";
+    if (renScore === currentScore) return "TODAY";
+
+    const cleanStr = String(renDateStr).trim().split("T")[0].split(" ")[0];
+    const parts = cleanStr.includes("/") ? cleanStr.split("/") : cleanStr.split("-");
+    let renDateObj = new Date();
+    if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        renDateObj = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+      } else {
+        renDateObj = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+      }
+    }
+    const todayObj = new Date();
+    todayObj.setHours(0, 0, 0, 0);
     renDateObj.setHours(0, 0, 0, 0);
-    const normalizedRenTs = renDateObj.getTime();
+    const diffDays = Math.ceil((renDateObj.getTime() - todayObj.getTime()) / (1000 * 60 * 60 * 24));
 
-    const diffDays = Math.ceil((normalizedRenTs - todayTs) / (1000 * 60 * 60 * 24));
-
-    if (diffDays < 0) return "EXPIRED";
-    if (diffDays === 0) return "TODAY";
     if (diffDays <= 3 && diffDays > 0) return "WARNING_3DAYS";
     return "SAFE";
   };
@@ -307,7 +391,7 @@ export default function Dashboard() {
     setFormData((prev) => ({ ...prev, selectedSeatNum: seatNum, seatNo: `${row}-${seatNum}` }));
   };
 
-  // COMPILED HISTORY: SORTED DESCENDING (LATEST RECORD STRICTLY AT INDEX 0)
+  // Student ke sabhi receipts nikaalna - NAYI HAMESHA TOP PAR
   const getCompiledHistoryForStudent = (st: Student): RenewalLog[] => {
     const rawLogs = renewalHistory.filter(
       (h) =>
@@ -325,7 +409,7 @@ export default function Dashboard() {
     const combined: RenewalLog[] = [...rawLogs];
     if (!hasAdmissionLogged && st.admDate && st.admDate !== "-") {
       const originalFirstRenDate = calculateRenewalDateFromBase(st.admDate, st.plan || "1 Month");
-      combined.push({
+      combined.unshift({
         txId: `INIT-${st.studentId}`,
         studentId: st.studentId,
         name: st.name,
@@ -339,30 +423,12 @@ export default function Dashboard() {
       });
     }
 
-    // 100% Guaranteed Numeric Timestamp Sort: Highest Date (Latest) on Top!
+    // NAYA TRANSACTION STRICTLY AT INDEX 0 (TOP)
     return combined.sort((a, b) => {
-      const tsA = Math.max(getExactTimestamp(a.newRenDate), getExactTimestamp(a.payDate));
-      const tsB = Math.max(getExactTimestamp(b.newRenDate), getExactTimestamp(b.payDate));
-      return tsB - tsA;
+      const scoreA = Math.max(getDateScore(a.payDate), getDateScore(a.newRenDate));
+      const scoreB = Math.max(getDateScore(b.payDate), getDateScore(b.newRenDate));
+      return scoreB - scoreA;
     });
-  };
-
-  // Student Directory me latest active period
-  const getLatestActivePeriodForStudent = (st: Student) => {
-    const compiled = getCompiledHistoryForStudent(st);
-    if (compiled.length > 0) {
-      const latest = compiled[0]; // Top one is latest
-      return {
-        startDate: formatDateToDDMMYYYY(latest.oldRenDate) || formatDateToDDMMYYYY(st.admDate),
-        endDate: formatDateToDDMMYYYY(latest.newRenDate) || formatDateToDDMMYYYY(st.renDate),
-        plan: latest.plan || st.plan || "1 Month",
-      };
-    }
-    return {
-      startDate: formatDateToDDMMYYYY(st.admDate),
-      endDate: formatDateToDDMMYYYY(st.renDate),
-      plan: st.plan || "1 Month",
-    };
   };
 
   const hasStudentRenewed = (st: Student): boolean => {
@@ -376,11 +442,11 @@ export default function Dashboard() {
   };
 
   const openRenewModal = (student: Student) => {
-    const latestPeriod = getLatestActivePeriodForStudent(student);
-    const currentPlan = latestPeriod.plan || student.plan || "1 Month";
+    const currentPlan = student.plan || "1 Month";
     const autoFee = PLAN_FEE_RATES[currentPlan] ?? 1200;
 
-    const startDateVal = formatToInputDate(latestPeriod.endDate) || new Date().toISOString().slice(0, 10);
+    // Start date seedha student ki current Renewal Date banegi
+    const startDateVal = formatToInputDate(student.renDate) || new Date().toISOString().slice(0, 10);
     const calcDate = calculateRenewalDateFromBase(startDateVal, currentPlan);
 
     setRenewFormData({
@@ -426,7 +492,7 @@ export default function Dashboard() {
         body: formBody.toString(),
       });
 
-      // Update state: Original Admission Date bilkul change nahi hogi
+      // Update state: Original Admission Date bilkul chhedi nahi jayegi
       setStudents((prev) =>
         prev.map((s) =>
           s.rowIndex === studentToRenew.rowIndex
@@ -434,13 +500,13 @@ export default function Dashboard() {
                 ...s,
                 status: "Active",
                 plan: renewFormData.plan,
-                renDate: renewFormData.newRenDate,
+                renDate: renewFormData.newRenDate, // Sirf latest Renewal Date update hogi
               }
             : s
         )
       );
 
-      // Latest transaction on top
+      // Latest receipt list me top par judegi
       setRenewalHistory((prev) => [
         {
           txId: "TX-" + Date.now(),
@@ -600,7 +666,7 @@ export default function Dashboard() {
     }
   };
 
-  // Metrics
+  // Counters
   const totalStudents = students.length;
   const activeStudents = students.filter((s) => s.status === "Active").length;
   const inactiveStudents = totalStudents - activeStudents;
@@ -663,30 +729,25 @@ export default function Dashboard() {
       if (a.status !== "Active" && b.status === "Active") return 1;
 
       if (a.status === "Active" && b.status === "Active") {
-        const periodA = getLatestActivePeriodForStudent(a);
-        const periodB = getLatestActivePeriodForStudent(b);
-        return getExactTimestamp(periodA.endDate) - getExactTimestamp(periodB.endDate);
+        return getDateScore(a.renDate) - getDateScore(b.renDate);
       }
-      return getExactTimestamp(b.renDate) - getExactTimestamp(a.renDate);
+      return getDateScore(b.renDate) - getDateScore(a.renDate);
     });
 
-  // Top Indicators: Checked with Latest Renewed Period
+  // Top Indicators: Direct check with student's current Sheet1 Renewal Date
   const expiredCount = students.filter((s) => {
     if (s.status !== "Active") return false;
-    const period = getLatestActivePeriodForStudent(s);
-    return getRenewalAlertStatus(period.endDate, s.status) === "EXPIRED";
+    return getRenewalAlertStatus(s.renDate, s.status) === "EXPIRED";
   }).length;
 
   const todayDueCount = students.filter((s) => {
     if (s.status !== "Active") return false;
-    const period = getLatestActivePeriodForStudent(s);
-    return getRenewalAlertStatus(period.endDate, s.status) === "TODAY";
+    return getRenewalAlertStatus(s.renDate, s.status) === "TODAY";
   }).length;
 
   const due3DaysCount = students.filter((s) => {
     if (s.status !== "Active") return false;
-    const period = getLatestActivePeriodForStudent(s);
-    return getRenewalAlertStatus(period.endDate, s.status) === "WARNING_3DAYS";
+    return getRenewalAlertStatus(s.renDate, s.status) === "WARNING_3DAYS";
   }).length;
 
   const calculateExactVisibleRows = () => {
@@ -737,7 +798,7 @@ export default function Dashboard() {
   const displayActive = filteredStudents.filter((s) => s.status === "Active").length;
   const displayInactive = displayTotal - displayActive;
 
-  // History list for the modal - GUARANTEED LATEST ON TOP
+  // History list for the modal
   const historyStudentLogs = viewHistoryStudent
     ? getCompiledHistoryForStudent(viewHistoryStudent)
     : [];
@@ -971,7 +1032,7 @@ export default function Dashboard() {
                       <p className="text-[11px] font-bold tracking-widest uppercase opacity-90">TOTAL COLLECTION (LEDGER)</p>
                       <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-bold">Lifetime</span>
                     </div>
-                    <p className="text-4xl font-black mt-2 tracking-tight">{totalCombinedIncome.toLocaleString("en-IN")}</p>
+                    <p className="text-4xl font-black mt-2 tracking-tight">₹{totalCombinedIncome.toLocaleString("en-IN")}</p>
                   </div>
 
                   <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs font-semibold">
@@ -1090,10 +1151,9 @@ export default function Dashboard() {
                 <button
                   onClick={() => {
                     const headers = ["Student ID", "Name", "Gender", "Father Name", "Course Exam", "Mobile", "Seat", "Plan", "Fee", "Status", "Type", "Admission Date", "Renewal Date", "Aadhaar"];
-                    const rows = filteredStudents.map((s) => {
-                      const period = getLatestActivePeriodForStudent(s);
-                      return [s.studentId, s.name, s.gender, s.fatherName, s.course, s.phone, s.seatNo, period.plan, s.monthlyFee, s.status, s.studentType, period.startDate, period.endDate, s.idProof];
-                    });
+                    const rows = filteredStudents.map((s) => [
+                      s.studentId, s.name, s.gender, s.fatherName, s.course, s.phone, s.seatNo, s.plan, s.monthlyFee, s.status, s.studentType, formatDateToDDMMYYYY(s.admDate), formatDateToDDMMYYYY(s.renDate), s.idProof
+                    ]);
                     const csv = "data:text/csv;charset=utf-8," + [headers, ...rows].map((r) => r.join(",")).join("\n");
                     const a = document.createElement("a");
                     a.href = encodeURI(csv);
@@ -1141,8 +1201,7 @@ export default function Dashboard() {
                         </tr>
                       ) : (
                         filteredStudents.map((st, idx) => {
-                          const activePeriod = getLatestActivePeriodForStudent(st);
-                          const alertStatus = getRenewalAlertStatus(activePeriod.endDate, st.status);
+                          const alertStatus = getRenewalAlertStatus(st.renDate, st.status);
                           const isRenewedMember = st.status === "Active" && hasStudentRenewed(st);
 
                           let rowColorClass = "";
@@ -1206,17 +1265,17 @@ export default function Dashboard() {
                                 )}
                               </td>
 
-                              {/* LATEST MEMBERSHIP DATES - FROM (GREEN) & TO (RED) */}
+                              {/* DIRECT FROM SHEET1: PERMANENT ADM DATE & LATEST RENEWAL DATE */}
                               <td className="py-3 px-4 space-y-0.5">
                                 <p className="font-bold text-neutral-900">
-                                  {activePeriod.plan}
+                                  {st.plan}
                                 </p>
                                 <p className="text-[11px]">
-                                  From: <span className="text-emerald-700 font-bold">{formatDateToDDMMYYYY(activePeriod.startDate)}</span>
+                                  From: <span className="text-emerald-700 font-bold">{formatDateToDDMMYYYY(st.admDate)}</span>
                                 </p>
                                 <div className="text-[11px] flex items-center gap-1.5 flex-wrap">
                                   <span>
-                                    To: <span className="font-bold text-red-600">{formatDateToDDMMYYYY(activePeriod.endDate)}</span>
+                                    To: <span className="font-bold text-red-600">{formatDateToDDMMYYYY(st.renDate)}</span>
                                   </span>
                                   {alertStatus === "EXPIRED" && (
                                     <span className="bg-rose-600 text-white font-black text-[9px] px-1.5 py-0.2 rounded uppercase animate-pulse shadow-sm">
@@ -1468,96 +1527,7 @@ export default function Dashboard() {
         </main>
       </div>
 
-      {/* RENEWAL MODAL */}
-      {studentToRenew && (
-        <div
-          onClick={() => setStudentToRenew(null)}
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="bg-white border border-[#cad5e2] rounded-2xl w-full max-w-md shadow-2xl p-5 space-y-4"
-          >
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-extrabold text-neutral-900 text-sm">⚡ Student Membership Renewal</h3>
-              <button onClick={() => setStudentToRenew(null)} className="text-neutral-400 font-bold text-xs">✕</button>
-            </div>
-            <form onSubmit={handleConfirmRenew} className="space-y-3 text-xs">
-              <div>
-                <label className="block text-[10px] font-bold text-neutral-600 uppercase mb-1">Select Plan</label>
-                <select
-                  value={renewFormData.plan}
-                  onChange={(e) => {
-                    const p = e.target.value;
-                    const fee = PLAN_FEE_RATES[p] ?? 1200;
-                    setRenewFormData({ ...renewFormData, plan: p, feePaid: fee, newRenDate: calculateRenewalDateFromBase(renewFormData.startDate, p) });
-                  }}
-                  className="w-full bg-neutral-50 border p-2 rounded-lg font-bold"
-                >
-                  <option value="6hrs/Month">6hrs/Month</option>
-                  <option value="1 Month">1 Month</option>
-                  <option value="3 Month">3 Month</option>
-                  <option value="6 Month">6 Month</option>
-                  <option value="9 Month">9 Month</option>
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-bold text-neutral-600 uppercase mb-1">Start Date</label>
-                  <input
-                    type="date"
-                    required
-                    value={renewFormData.startDate}
-                    onChange={(e) => setRenewFormData({ ...renewFormData, startDate: e.target.value, newRenDate: calculateRenewalDateFromBase(e.target.value, renewFormData.plan) })}
-                    className="w-full bg-neutral-50 border p-1.5 rounded-lg font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-neutral-600 uppercase mb-1">New Renewal Date</label>
-                  <input
-                    type="date"
-                    required
-                    value={renewFormData.newRenDate}
-                    onChange={(e) => setRenewFormData({ ...renewFormData, newRenDate: e.target.value })}
-                    className="w-full bg-neutral-50 border p-1.5 rounded-lg font-bold"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-bold text-neutral-600 uppercase mb-1">Fee Amount (₹)</label>
-                  <input
-                    type="number"
-                    value={renewFormData.feePaid}
-                    onChange={(e) => setRenewFormData({ ...renewFormData, feePaid: e.target.value })}
-                    className="w-full bg-neutral-50 border p-2 rounded-lg font-black text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-neutral-600 uppercase mb-1">Payment Mode</label>
-                  <select
-                    value={renewFormData.payMode}
-                    onChange={(e) => setRenewFormData({ ...renewFormData, payMode: e.target.value })}
-                    className="w-full bg-neutral-50 border p-2 rounded-lg font-bold"
-                  >
-                    <option value="Cash">Cash</option>
-                    <option value="UPI / QR">UPI / QR</option>
-                    <option value="Bank Transfer">Bank Transfer</option>
-                  </select>
-                </div>
-              </div>
-              <div className="pt-2 flex justify-end gap-2 border-t">
-                <button type="button" onClick={() => setStudentToRenew(null)} className="px-4 py-2 border rounded-lg font-bold">Cancel</button>
-                <button type="submit" disabled={isSubmitting} className="px-5 py-2 bg-emerald-600 text-white rounded-lg font-black">
-                  {isSubmitting ? "Saving..." : "Confirm & Save"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* STUDENT PROFILE MODAL */}
+      {/* STUDENT PROFILE MODAL - FIXED PERMANENT ADMISSION DATE */}
       {viewStudent && (
         <div
           onClick={() => setViewStudent(null)}
@@ -1586,9 +1556,9 @@ export default function Dashboard() {
             </div>
             <div className="bg-[#f2faf5] border border-[#d2eedf] rounded-xl p-3 grid grid-cols-2 gap-2 font-medium">
               <p>💺 <b>Seat:</b> <span className="font-black text-blue-700">{viewStudent.seatNo}</span></p>
-              <p>⏳ <b>Plan:</b> <span className="font-bold text-neutral-900">{getLatestActivePeriodForStudent(viewStudent).plan}</span></p>
+              <p>⏳ <b>Plan:</b> <span className="font-bold text-neutral-900">{viewStudent.plan}</span></p>
               <p>📅 <b>Admission:</b> <span className="font-black text-emerald-700">{formatDateToDDMMYYYY(viewStudent.admDate)}</span></p>
-              <p>🗓️ <b>Renewal:</b> <span className="font-black text-red-600">{formatDateToDDMMYYYY(getLatestActivePeriodForStudent(viewStudent).endDate)}</span></p>
+              <p>🗓️ <b>Renewal:</b> <span className="font-black text-red-600">{formatDateToDDMMYYYY(viewStudent.renDate)}</span></p>
             </div>
             <div className="pt-2 flex justify-end">
               <button
@@ -1606,7 +1576,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* RECEIPTS LEDGER MODAL - LATEST TRANSITION TOP PAR */}
+      {/* RECEIPTS LEDGER MODAL - LATEST ON TOP */}
       {viewHistoryStudent && (
         <div
           onClick={() => setViewHistoryStudent(null)}
