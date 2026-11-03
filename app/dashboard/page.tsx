@@ -125,108 +125,72 @@ export default function Dashboard() {
   };
   const [formData, setFormData] = useState<Student>(initialForm);
 
-  // Clean DD/MM/YYYY Output
+  // UNIVERSAL TIMESTAMP PARSER: Parses DD/MM/YYYY, YYYY-MM-DD, and "Tue Sep 08 2026..." flawlessly
+  const getExactTimestamp = (dateStr: any): number => {
+    if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return 0;
+    const s = String(dateStr).trim();
+
+    // 1. Check DD/MM/YYYY
+    if (s.includes("/")) {
+      const clean = s.split("T")[0].split(" ")[0];
+      const parts = clean.split("/");
+      if (parts.length === 3) {
+        if (parts[2].length >= 4) {
+          const dt = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+          if (!isNaN(dt.getTime())) return dt.getTime();
+        } else if (parts[0].length >= 4) {
+          const dt = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+          if (!isNaN(dt.getTime())) return dt.getTime();
+        }
+      }
+    }
+
+    // 2. Check YYYY-MM-DD
+    if (s.includes("-") && (s.includes("T") || s.split(" ")[0].split("-")[0].length === 4)) {
+      const clean = s.split("T")[0].split(" ")[0];
+      const parts = clean.split("-");
+      if (parts.length === 3 && parts[0].length === 4) {
+        const dt = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        if (!isNaN(dt.getTime())) return dt.getTime();
+      }
+    }
+
+    // 3. Native parse for "Tue Sep 08 2026..." or raw date strings
+    const nativeDt = new Date(s);
+    if (!isNaN(nativeDt.getTime())) return nativeDt.getTime();
+
+    return 0;
+  };
+
+  // CLEAN DD/MM/YYYY FORMATTER
   const formatDateToDDMMYYYY = (dateStr: any): string => {
     if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return "-";
-    const raw = String(dateStr).trim();
-    const cleanStr = raw.split("T")[0].split(" ")[0].trim();
+    const ts = getExactTimestamp(dateStr);
+    if (!ts) return String(dateStr).trim().split("T")[0].split(" ")[0];
 
-    if (cleanStr.includes("-")) {
-      const parts = cleanStr.split("-");
-      if (parts.length === 3) {
-        if (parts[0].length === 4) {
-          return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`;
-        } else {
-          return `${parts[0].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[2].slice(0, 4)}`;
-        }
-      }
-    }
-
-    if (cleanStr.includes("/")) {
-      const parts = cleanStr.split("/");
-      if (parts.length === 3) {
-        if (parts[2].length === 4) {
-          return `${parts[0].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[2]}`;
-        } else if (parts[0].length === 4) {
-          return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`;
-        }
-      }
-    }
-
-    try {
-      const d = new Date(raw);
-      if (!isNaN(d.getTime())) {
-        const day = String(d.getDate()).padStart(2, "0");
-        const month = String(d.getMonth() + 1).padStart(2, "0");
-        const year = d.getFullYear();
-        return `${day}/${month}/${year}`;
-      }
-    } catch (e) {}
-
-    return cleanStr;
+    const d = new Date(ts);
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
   };
 
   const formatToInputDate = (dateStr: any): string => {
     if (!dateStr || dateStr === "-") return "";
-    const raw = String(dateStr).trim();
-    const cleanStr = raw.split("T")[0].split(" ")[0].trim();
-
-    if (cleanStr.includes("-")) {
-      const parts = cleanStr.split("-");
-      if (parts.length === 3) {
-        if (parts[0].length === 4) return cleanStr;
-        return `${parts[2].slice(0, 4)}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
-      }
-    }
-
-    if (cleanStr.includes("/")) {
-      const parts = cleanStr.split("/");
-      if (parts.length === 3) {
-        if (parts[2].length === 4) {
-          return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
-        }
-      }
-    }
-
-    try {
-      const d = new Date(raw);
-      if (!isNaN(d.getTime())) {
-        return d.toISOString().slice(0, 10);
-      }
-    } catch (e) {}
-
-    return "";
+    const ts = getExactTimestamp(dateStr);
+    if (!ts) return "";
+    const d = new Date(ts);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   };
 
   const calculateRenewalDateFromBase = (baseDateStr: string, planStr: string): string => {
     if (!baseDateStr || baseDateStr === "-") return "";
-    let cleanStr = String(baseDateStr).trim().split("T")[0].split(" ")[0];
+    const ts = getExactTimestamp(baseDateStr);
+    const baseDate = ts ? new Date(ts) : new Date();
 
-    let y = 0, m = 0, d = 0;
-    if (cleanStr.includes("-")) {
-      const parts = cleanStr.split("-");
-      if (parts[0].length === 4) {
-        y = parseInt(parts[0], 10);
-        m = parseInt(parts[1], 10);
-        d = parseInt(parts[2], 10);
-      } else {
-        d = parseInt(parts[0], 10);
-        m = parseInt(parts[1], 10);
-        y = parseInt(parts[2], 10);
-      }
-    } else if (cleanStr.includes("/")) {
-      const parts = cleanStr.split("/");
-      d = parseInt(parts[0], 10);
-      m = parseInt(parts[1], 10);
-      y = parseInt(parts[2].slice(0, 4), 10);
-    }
-
-    if (!y || !m || !d || isNaN(y) || isNaN(m) || isNaN(d)) {
-      const now = new Date();
-      y = now.getFullYear();
-      m = now.getMonth() + 1;
-      d = now.getDate();
-    }
+    let y = baseDate.getFullYear();
+    let m = baseDate.getMonth() + 1;
+    let d = baseDate.getDate();
 
     let monthsToAdd = 1;
     if (planStr.includes("3 Month")) monthsToAdd = 3;
@@ -248,68 +212,26 @@ export default function Dashboard() {
     return `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(finalDay).padStart(2, "0")}`;
   };
 
-  // Convert ANY date string into a purely numerical score YYYYMMDD
-  const getDateScore = (dateStr: any): number => {
-    if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return 0;
-    const s = String(dateStr).trim().split("T")[0].split(" ")[0];
-
-    if (s.includes("/")) {
-      const parts = s.split("/");
-      if (parts.length === 3) {
-        if (parts[2].length === 4) {
-          return parseInt(`${parts[2]}${parts[1].padStart(2, "0")}${parts[0].padStart(2, "0")}`, 10) || 0;
-        } else if (parts[0].length === 4) {
-          return parseInt(`${parts[0]}${parts[1].padStart(2, "0")}${parts[2].padStart(2, "0")}`, 10) || 0;
-        }
-      }
-    }
-
-    if (s.includes("-")) {
-      const parts = s.split("-");
-      if (parts.length === 3) {
-        if (parts[0].length === 4) {
-          return parseInt(`${parts[0]}${parts[1].padStart(2, "0")}${parts[2].padStart(2, "0")}`, 10) || 0;
-        } else if (parts[2].length === 4) {
-          return parseInt(`${parts[2]}${parts[1].padStart(2, "0")}${parts[0].padStart(2, "0")}`, 10) || 0;
-        }
-      }
-    }
-
-    return 0;
-  };
-
   const getRenewalAlertStatus = (
     renDateStr: string,
     status: string
   ): "EXPIRED" | "TODAY" | "WARNING_3DAYS" | "SAFE" => {
     if (status !== "Active" || !renDateStr || renDateStr === "-") return "SAFE";
-    const renScore = getDateScore(renDateStr);
-    if (!renScore) return "SAFE";
+    const renTs = getExactTimestamp(renDateStr);
+    if (!renTs) return "SAFE";
 
-    const now = new Date();
-    const currentScore = parseInt(
-      `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`,
-      10
-    );
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayTs = today.getTime();
 
-    if (renScore < currentScore) return "EXPIRED";
-    if (renScore === currentScore) return "TODAY";
-
-    const cleanStr = String(renDateStr).trim().split("T")[0].split(" ")[0];
-    const parts = cleanStr.includes("/") ? cleanStr.split("/") : cleanStr.split("-");
-    let renDateObj = new Date();
-    if (parts.length === 3) {
-      if (parts[0].length === 4) {
-        renDateObj = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-      } else {
-        renDateObj = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
-      }
-    }
-    const todayObj = new Date();
-    todayObj.setHours(0, 0, 0, 0);
+    const renDateObj = new Date(renTs);
     renDateObj.setHours(0, 0, 0, 0);
-    const diffDays = Math.ceil((renDateObj.getTime() - todayObj.getTime()) / (1000 * 60 * 60 * 24));
+    const normalizedRenTs = renDateObj.getTime();
 
+    const diffDays = Math.ceil((normalizedRenTs - todayTs) / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) return "EXPIRED";
+    if (diffDays === 0) return "TODAY";
     if (diffDays <= 3 && diffDays > 0) return "WARNING_3DAYS";
     return "SAFE";
   };
@@ -385,7 +307,7 @@ export default function Dashboard() {
     setFormData((prev) => ({ ...prev, selectedSeatNum: seatNum, seatNo: `${row}-${seatNum}` }));
   };
 
-  // Student ke sabhi receipts filter karke DESCENDING order me sort karein (Latest top par)
+  // COMPILED HISTORY: SORTED DESCENDING (LATEST RECORD STRICTLY AT INDEX 0)
   const getCompiledHistoryForStudent = (st: Student): RenewalLog[] => {
     const rawLogs = renewalHistory.filter(
       (h) =>
@@ -417,11 +339,11 @@ export default function Dashboard() {
       });
     }
 
-    // Sort strictly by Date Score Descending (Highest date on top)
+    // 100% Guaranteed Numeric Timestamp Sort: Highest Date (Latest) on Top!
     return combined.sort((a, b) => {
-      const scoreA = Math.max(getDateScore(a.payDate), getDateScore(a.newRenDate));
-      const scoreB = Math.max(getDateScore(b.payDate), getDateScore(b.newRenDate));
-      return scoreB - scoreA;
+      const tsA = Math.max(getExactTimestamp(a.newRenDate), getExactTimestamp(a.payDate));
+      const tsB = Math.max(getExactTimestamp(b.newRenDate), getExactTimestamp(b.payDate));
+      return tsB - tsA;
     });
   };
 
@@ -429,7 +351,7 @@ export default function Dashboard() {
   const getLatestActivePeriodForStudent = (st: Student) => {
     const compiled = getCompiledHistoryForStudent(st);
     if (compiled.length > 0) {
-      const latest = compiled[0]; // Sabse top par latest receipt hoti hai
+      const latest = compiled[0]; // Top one is latest
       return {
         startDate: formatDateToDDMMYYYY(latest.oldRenDate) || formatDateToDDMMYYYY(st.admDate),
         endDate: formatDateToDDMMYYYY(latest.newRenDate) || formatDateToDDMMYYYY(st.renDate),
@@ -512,13 +434,13 @@ export default function Dashboard() {
                 ...s,
                 status: "Active",
                 plan: renewFormData.plan,
-                renDate: renewFormData.newRenDate, // Sirf Renewal Date badli
+                renDate: renewFormData.newRenDate,
               }
             : s
         )
       );
 
-      // Latest receipt top par insert hogi
+      // Latest transaction on top
       setRenewalHistory((prev) => [
         {
           txId: "TX-" + Date.now(),
@@ -743,9 +665,9 @@ export default function Dashboard() {
       if (a.status === "Active" && b.status === "Active") {
         const periodA = getLatestActivePeriodForStudent(a);
         const periodB = getLatestActivePeriodForStudent(b);
-        return getDateScore(periodA.endDate) - getDateScore(periodB.endDate);
+        return getExactTimestamp(periodA.endDate) - getExactTimestamp(periodB.endDate);
       }
-      return getDateScore(b.renDate) - getDateScore(a.renDate);
+      return getExactTimestamp(b.renDate) - getExactTimestamp(a.renDate);
     });
 
   // Top Indicators: Checked with Latest Renewed Period
@@ -815,7 +737,7 @@ export default function Dashboard() {
   const displayActive = filteredStudents.filter((s) => s.status === "Active").length;
   const displayInactive = displayTotal - displayActive;
 
-  // History list for the modal
+  // History list for the modal - GUARANTEED LATEST ON TOP
   const historyStudentLogs = viewHistoryStudent
     ? getCompiledHistoryForStudent(viewHistoryStudent)
     : [];
@@ -1049,7 +971,7 @@ export default function Dashboard() {
                       <p className="text-[11px] font-bold tracking-widest uppercase opacity-90">TOTAL COLLECTION (LEDGER)</p>
                       <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-bold">Lifetime</span>
                     </div>
-                    <p className="text-4xl font-black mt-2 tracking-tight">₹{totalCombinedIncome.toLocaleString("en-IN")}</p>
+                    <p className="text-4xl font-black mt-2 tracking-tight">{totalCombinedIncome.toLocaleString("en-IN")}</p>
                   </div>
 
                   <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs font-semibold">
@@ -1546,6 +1468,95 @@ export default function Dashboard() {
         </main>
       </div>
 
+      {/* RENEWAL MODAL */}
+      {studentToRenew && (
+        <div
+          onClick={() => setStudentToRenew(null)}
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white border border-[#cad5e2] rounded-2xl w-full max-w-md shadow-2xl p-5 space-y-4"
+          >
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-extrabold text-neutral-900 text-sm">⚡ Student Membership Renewal</h3>
+              <button onClick={() => setStudentToRenew(null)} className="text-neutral-400 font-bold text-xs">✕</button>
+            </div>
+            <form onSubmit={handleConfirmRenew} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-[10px] font-bold text-neutral-600 uppercase mb-1">Select Plan</label>
+                <select
+                  value={renewFormData.plan}
+                  onChange={(e) => {
+                    const p = e.target.value;
+                    const fee = PLAN_FEE_RATES[p] ?? 1200;
+                    setRenewFormData({ ...renewFormData, plan: p, feePaid: fee, newRenDate: calculateRenewalDateFromBase(renewFormData.startDate, p) });
+                  }}
+                  className="w-full bg-neutral-50 border p-2 rounded-lg font-bold"
+                >
+                  <option value="6hrs/Month">6hrs/Month</option>
+                  <option value="1 Month">1 Month</option>
+                  <option value="3 Month">3 Month</option>
+                  <option value="6 Month">6 Month</option>
+                  <option value="9 Month">9 Month</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-neutral-600 uppercase mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={renewFormData.startDate}
+                    onChange={(e) => setRenewFormData({ ...renewFormData, startDate: e.target.value, newRenDate: calculateRenewalDateFromBase(e.target.value, renewFormData.plan) })}
+                    className="w-full bg-neutral-50 border p-1.5 rounded-lg font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-neutral-600 uppercase mb-1">New Renewal Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={renewFormData.newRenDate}
+                    onChange={(e) => setRenewFormData({ ...renewFormData, newRenDate: e.target.value })}
+                    className="w-full bg-neutral-50 border p-1.5 rounded-lg font-bold"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-neutral-600 uppercase mb-1">Fee Amount (₹)</label>
+                  <input
+                    type="number"
+                    value={renewFormData.feePaid}
+                    onChange={(e) => setRenewFormData({ ...renewFormData, feePaid: e.target.value })}
+                    className="w-full bg-neutral-50 border p-2 rounded-lg font-black text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-neutral-600 uppercase mb-1">Payment Mode</label>
+                  <select
+                    value={renewFormData.payMode}
+                    onChange={(e) => setRenewFormData({ ...renewFormData, payMode: e.target.value })}
+                    className="w-full bg-neutral-50 border p-2 rounded-lg font-bold"
+                  >
+                    <option value="Cash">Cash</option>
+                    <option value="UPI / QR">UPI / QR</option>
+                    <option value="Bank Transfer">Bank Transfer</option>
+                  </select>
+                </div>
+              </div>
+              <div className="pt-2 flex justify-end gap-2 border-t">
+                <button type="button" onClick={() => setStudentToRenew(null)} className="px-4 py-2 border rounded-lg font-bold">Cancel</button>
+                <button type="submit" disabled={isSubmitting} className="px-5 py-2 bg-emerald-600 text-white rounded-lg font-black">
+                  {isSubmitting ? "Saving..." : "Confirm & Save"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* STUDENT PROFILE MODAL */}
       {viewStudent && (
         <div
@@ -1595,7 +1606,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* RECEIPTS LEDGER MODAL - GUARANTEED LATEST ON TOP */}
+      {/* RECEIPTS LEDGER MODAL - LATEST TRANSITION TOP PAR */}
       {viewHistoryStudent && (
         <div
           onClick={() => setViewHistoryStudent(null)}
@@ -1733,7 +1744,7 @@ export default function Dashboard() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-neutral-600 mb-1 uppercase text-[10px]">Select Row</label>
+                  <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">Select Row</label>
                   <select
                     value={formData.selectedRow}
                     onChange={(e) => handleRowChange(e.target.value)}
@@ -1746,7 +1757,7 @@ export default function Dashboard() {
                   </select>
                 </div>
                 <div>
-                  <label className="block font-bold text-neutral-600 mb-1 uppercase text-[10px]">Seat Number</label>
+                  <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">Seat Number</label>
                   <select
                     disabled={formData.selectedRow === "None"}
                     value={formData.selectedSeatNum}
