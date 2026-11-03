@@ -158,7 +158,7 @@ export default function Dashboard() {
   };
   const [formData, setFormData] = useState<Student>(initialForm);
 
-  // Accurate Date Formatter (DD/MM/YYYY)
+  // Exact Clean Date Formatter (DD/MM/YYYY)
   const formatDateToDDMMYYYY = (dateStr: any): string => {
     if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return "-";
     const raw = String(dateStr).trim();
@@ -416,6 +416,7 @@ export default function Dashboard() {
     setFormData((prev) => ({ ...prev, selectedSeatNum: seatNum, seatNo: `${row}-${seatNum}` }));
   };
 
+  // History Compiled & Guaranteed NEWEST (LATEST) FIRST AT TOP
   const getCompiledHistoryForStudent = (st: Student): RenewalLog[] => {
     const rawLogs = renewalHistory.filter(
       (h) =>
@@ -447,7 +448,7 @@ export default function Dashboard() {
       });
     }
 
-    // Newest/Latest Transaction at Index 0 (Top)
+    // Newest at Index 0 (Top)
     return combined.sort((a, b) => {
       const tsA = Math.max(parseDateToTimestamp(a.newRenDate), parseDateToTimestamp(a.payDate));
       const tsB = Math.max(parseDateToTimestamp(b.newRenDate), parseDateToTimestamp(b.payDate));
@@ -455,6 +456,7 @@ export default function Dashboard() {
     });
   };
 
+  // Student Directory & Modal ke liye Latest Active Period
   const getLatestActivePeriodForStudent = (st: Student) => {
     const compiled = getCompiledHistoryForStudent(st);
     if (compiled.length > 0) {
@@ -894,7 +896,7 @@ export default function Dashboard() {
       return parseDateToTimestamp(b.renDate) - parseDateToTimestamp(a.renDate);
     });
 
-  // Top Indicator Live Counts (Using Latest Renewed Period)
+  // Top Indicators: Checked with Latest Renewed Period
   const expiredCount = students.filter((s) => {
     if (s.status !== "Active") return false;
     const period = getLatestActivePeriodForStudent(s);
@@ -966,7 +968,6 @@ export default function Dashboard() {
 
   return (
     <div className="flex h-screen bg-[#f1eee7] text-neutral-800 font-sans antialiased overflow-hidden select-none relative">
-      {/* Mobile Backdrop */}
       {isSidebarOpen && (
         <div
           onClick={() => setIsSidebarOpen(false)}
@@ -1558,7 +1559,7 @@ export default function Dashboard() {
                                 )}
                               </td>
 
-                              {/* LATEST MEMBERSHIP DATES - CLEAN DD/MM/YYYY */}
+                              {/* LATEST MEMBERSHIP DATES - FROM (GREEN) & TO (RED) */}
                               <td className="py-3 px-4 space-y-0.5">
                                 <p className="font-bold text-neutral-900">
                                   {activePeriod.plan}
@@ -2104,7 +2105,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* STUDENT PROFILE MODAL */}
+      {/* STUDENT DETAILS PROFILE MODAL - CLEANED AND ACCURATE (IMAGE 1 FIX) */}
       {viewStudent && (
         <div
           onClick={() => setViewStudent(null)}
@@ -2133,8 +2134,8 @@ export default function Dashboard() {
             </div>
             <div className="bg-[#f2faf5] border border-[#d2eedf] rounded-xl p-3 grid grid-cols-2 gap-2 font-medium">
               <p>💺 <b>Seat:</b> <span className="font-black text-blue-700">{viewStudent.seatNo}</span></p>
-              <p>⏳ <b>Plan:</b> {viewStudent.plan}</p>
-              <p>📅 <b>Admission:</b> {formatDateToDDMMYYYY(viewStudent.admDate)}</p>
+              <p>⏳ <b>Plan:</b> <span className="font-bold text-neutral-900">{getLatestActivePeriodForStudent(viewStudent).plan}</span></p>
+              <p>📅 <b>Admission:</b> <span className="font-black text-emerald-700">{formatDateToDDMMYYYY(viewStudent.admDate)}</span></p>
               <p>🗓️ <b>Renewal:</b> <span className="font-black text-red-600">{formatDateToDDMMYYYY(getLatestActivePeriodForStudent(viewStudent).endDate)}</span></p>
             </div>
             <div className="pt-2 flex justify-end">
@@ -2153,7 +2154,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* RECEIPTS LEDGER MODAL */}
+      {/* RECEIPTS LEDGER MODAL - LATEST ON TOP (IMAGE 2 FIX) */}
       {viewHistoryStudent && (
         <div
           onClick={() => setViewHistoryStudent(null)}
