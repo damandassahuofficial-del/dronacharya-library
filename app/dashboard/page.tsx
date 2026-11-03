@@ -158,7 +158,7 @@ export default function Dashboard() {
   };
   const [formData, setFormData] = useState<Student>(initialForm);
 
-  // Exact Clean Date Formatter (DD/MM/YYYY)
+  // Clean DD/MM/YYYY Output
   const formatDateToDDMMYYYY = (dateStr: any): string => {
     if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return "-";
     const raw = String(dateStr).trim();
@@ -281,6 +281,7 @@ export default function Dashboard() {
     return `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(finalDay).padStart(2, "0")}`;
   };
 
+  // Precise Timestamp Calculator for Accurate Sorting
   const parseDateToTimestamp = (dateStr: any): number => {
     if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return 0;
     const s = String(dateStr).trim().split("T")[0].split(" ")[0];
@@ -288,11 +289,13 @@ export default function Dashboard() {
     if (s.includes("/")) {
       const parts = s.split("/");
       if (parts.length === 3) {
-        const d = parseInt(parts[0], 10);
-        const m = parseInt(parts[1], 10) - 1;
-        const y = parseInt(parts[2], 10);
-        const dt = new Date(y, m, d);
-        if (!isNaN(dt.getTime())) return dt.getTime();
+        if (parts[2].length === 4) {
+          const dt = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+          if (!isNaN(dt.getTime())) return dt.getTime();
+        } else if (parts[0].length === 4) {
+          const dt = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+          if (!isNaN(dt.getTime())) return dt.getTime();
+        }
       }
     }
 
@@ -300,16 +303,10 @@ export default function Dashboard() {
       const parts = s.split("-");
       if (parts.length === 3) {
         if (parts[0].length === 4) {
-          const y = parseInt(parts[0], 10);
-          const m = parseInt(parts[1], 10) - 1;
-          const d = parseInt(parts[2], 10);
-          const dt = new Date(y, m, d);
+          const dt = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
           if (!isNaN(dt.getTime())) return dt.getTime();
         } else {
-          const d = parseInt(parts[0], 10);
-          const m = parseInt(parts[1], 10) - 1;
-          const y = parseInt(parts[2], 10);
-          const dt = new Date(y, m, d);
+          const dt = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
           if (!isNaN(dt.getTime())) return dt.getTime();
         }
       }
@@ -416,7 +413,7 @@ export default function Dashboard() {
     setFormData((prev) => ({ ...prev, selectedSeatNum: seatNum, seatNo: `${row}-${seatNum}` }));
   };
 
-  // History Compiled & Guaranteed NEWEST (LATEST) FIRST AT TOP
+  // NEWEST/LATEST RECEIPT AT TOP (INDEX 0)
   const getCompiledHistoryForStudent = (st: Student): RenewalLog[] => {
     const rawLogs = renewalHistory.filter(
       (h) =>
@@ -444,11 +441,11 @@ export default function Dashboard() {
         payDate: formatDateToDDMMYYYY(st.admDate),
         oldRenDate: formatDateToDDMMYYYY(st.admDate),
         newRenDate: formatDateToDDMMYYYY(originalFirstRenDate),
-        remarks: "First Admission",
+        remarks: "First Admission Fee",
       });
     }
 
-    // Newest at Index 0 (Top)
+    // Sort strictly by latest payment date / renewal date (Descending: latest first)
     return combined.sort((a, b) => {
       const tsA = Math.max(parseDateToTimestamp(a.newRenDate), parseDateToTimestamp(a.payDate));
       const tsB = Math.max(parseDateToTimestamp(b.newRenDate), parseDateToTimestamp(b.payDate));
@@ -456,7 +453,7 @@ export default function Dashboard() {
     });
   };
 
-  // Student Directory & Modal ke liye Latest Active Period
+  // Student Directory & Profile ke liye latest active period
   const getLatestActivePeriodForStudent = (st: Student) => {
     const compiled = getCompiledHistoryForStudent(st);
     if (compiled.length > 0) {
@@ -856,7 +853,7 @@ export default function Dashboard() {
     .reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
   const totalCombinedIncome = allInitialAdmissionFees + allRenewalsFees;
 
-  // Sorting: Active students first, expired/due first within active
+  // Sorting
   const filteredStudents = students
     .filter((s) => {
       const q = searchQuery.toLowerCase();
@@ -1421,7 +1418,7 @@ export default function Dashboard() {
                     <option>9 Month</option>
                   </select>
 
-                  {/* TOP LIVE COLOR INDICATORS - EXACT COUNTS */}
+                  {/* TOP LIVE INDICATORS */}
                   <div className="flex items-center gap-2 text-[10px] font-bold px-3 py-1 bg-white/90 border border-[#e3dccb] rounded-lg shadow-sm">
                     <span className="flex items-center gap-1.5 text-rose-800">
                       <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-sm animate-pulse"></span>
@@ -1805,7 +1802,7 @@ export default function Dashboard() {
                           <span
                             className={
                               "text-[9px] truncate max-w-full font-bold mt-1 px-1.5 py-0.2 rounded " +
-                              (isTaken ? "bg-red-100 text-red-800" : "bg-emerald-100 text-emerald-800")
+                              (isTaken ? student?.name?.split(" ")[0] : "Free")
                             }
                           >
                             {isTaken ? student?.name?.split(" ")[0] : "Free"}
@@ -2105,7 +2102,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* STUDENT DETAILS PROFILE MODAL - CLEANED AND ACCURATE (IMAGE 1 FIX) */}
+      {/* STUDENT PROFILE MODAL - PROPER GREEN DATES */}
       {viewStudent && (
         <div
           onClick={() => setViewStudent(null)}
@@ -2154,7 +2151,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* RECEIPTS LEDGER MODAL - LATEST ON TOP (IMAGE 2 FIX) */}
+      {/* RECEIPTS LEDGER MODAL - LATEST TRANSITION TOP PAR */}
       {viewHistoryStudent && (
         <div
           onClick={() => setViewHistoryStudent(null)}
