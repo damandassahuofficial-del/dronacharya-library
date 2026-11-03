@@ -61,29 +61,11 @@ interface RenewalLog {
   remarks: string;
 }
 
-interface PendingApplicant {
-  pendingRowIndex: number;
-  date: string;
-  name: string;
-  fatherName: string;
-  gender: string;
-  dob: string;
-  phone: string;
-  altPhone: string;
-  course: string;
-  exam: string;
-  address: string;
-  pincode: string;
-  idProof: string;
-  status: string;
-}
-
 export default function Dashboard() {
-  const [activeMenu, setActiveMenu] = useState<"Dashboard" | "Students" | "Seats" | "Pending">("Dashboard");
+  const [activeMenu, setActiveMenu] = useState<"Dashboard" | "Students" | "Seats">("Dashboard");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [students, setStudents] = useState<Student[]>([]);
   const [renewalHistory, setRenewalHistory] = useState<RenewalLog[]>([]);
-  const [pendingApplicants, setPendingApplicants] = useState<PendingApplicant[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Status");
@@ -95,22 +77,7 @@ export default function Dashboard() {
   const [studentToRenew, setStudentToRenew] = useState<Student | null>(null);
   const [studentToDelete, setStudentToDelete] = useState<{ student: Student; sNo: number } | null>(null);
   const [editStudent, setEditStudent] = useState<Student | null>(null);
-  const [approvingApplicant, setApprovingApplicant] = useState<PendingApplicant | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const [approvalFormData, setApprovalFormData] = useState({
-    plan: "1 Month",
-    monthlyFee: 1200,
-    payMode: "Cash",
-    selectedRow: "युधिष्ठिर",
-    selectedSeatNum: "",
-    seatNo: "युधिष्ठिर-1",
-    studentType: "Reserved",
-    admDate: new Date().toISOString().slice(0, 10),
-    renDate: "",
-    batch: "FULL DAY",
-    remarks: "QR Admission Approved",
-  });
 
   const [renewFormData, setRenewFormData] = useState<{
     plan: string;
@@ -158,7 +125,7 @@ export default function Dashboard() {
   };
   const [formData, setFormData] = useState<Student>(initialForm);
 
-  // Exact Clean Date Formatter (DD/MM/YYYY)
+  // Clean DD/MM/YYYY Output Formatter
   const formatDateToDDMMYYYY = (dateStr: any): string => {
     if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return "-";
     const raw = String(dateStr).trim();
@@ -170,7 +137,7 @@ export default function Dashboard() {
         if (parts[0].length === 4) {
           return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`;
         } else {
-          return `${parts[0].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[2].slice(0, 4)}`;
+          return `${parts[0].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[2]}`;
         }
       }
     }
@@ -281,43 +248,28 @@ export default function Dashboard() {
     return `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(finalDay).padStart(2, "0")}`;
   };
 
-  // Convert ANY date string into a purely numerical score YYYYMMDD
-  const getDateNumericScore = (dateStr: any): number => {
+  const getDateScore = (dateStr: any): number => {
     if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return 0;
     const s = String(dateStr).trim().split("T")[0].split(" ")[0];
 
-    // DD/MM/YYYY
     if (s.includes("/")) {
       const parts = s.split("/");
       if (parts.length === 3) {
         if (parts[2].length === 4) {
-          const yr = parts[2];
-          const mo = parts[1].padStart(2, "0");
-          const da = parts[0].padStart(2, "0");
-          return parseInt(`${yr}${mo}${da}`, 10) || 0;
+          return parseInt(parts[2] + parts[1].padStart(2, "0") + parts[0].padStart(2, "0"), 10) || 0;
         } else if (parts[0].length === 4) {
-          const yr = parts[0];
-          const mo = parts[1].padStart(2, "0");
-          const da = parts[2].padStart(2, "0");
-          return parseInt(`${yr}${mo}${da}`, 10) || 0;
+          return parseInt(parts[0] + parts[1].padStart(2, "0") + parts[2].padStart(2, "0"), 10) || 0;
         }
       }
     }
 
-    // YYYY-MM-DD or DD-MM-YYYY
     if (s.includes("-")) {
       const parts = s.split("-");
       if (parts.length === 3) {
         if (parts[0].length === 4) {
-          const yr = parts[0];
-          const mo = parts[1].padStart(2, "0");
-          const da = parts[2].padStart(2, "0");
-          return parseInt(`${yr}${mo}${da}`, 10) || 0;
+          return parseInt(parts[0] + parts[1].padStart(2, "0") + parts[2].padStart(2, "0"), 10) || 0;
         } else if (parts[2].length === 4) {
-          const yr = parts[2];
-          const mo = parts[1].padStart(2, "0");
-          const da = parts[0].padStart(2, "0");
-          return parseInt(`${yr}${mo}${da}`, 10) || 0;
+          return parseInt(parts[2] + parts[1].padStart(2, "0") + parts[0].padStart(2, "0"), 10) || 0;
         }
       }
     }
@@ -330,7 +282,7 @@ export default function Dashboard() {
     status: string
   ): "EXPIRED" | "TODAY" | "WARNING_3DAYS" | "SAFE" => {
     if (status !== "Active" || !renDateStr || renDateStr === "-") return "SAFE";
-    const renScore = getDateNumericScore(renDateStr);
+    const renScore = getDateScore(renDateStr);
     if (!renScore) return "SAFE";
 
     const now = new Date();
@@ -371,7 +323,6 @@ export default function Dashboard() {
       } else if (data && typeof data === "object") {
         if (Array.isArray(data.students)) setStudents(data.students);
         if (Array.isArray(data.history)) setRenewalHistory(data.history);
-        if (Array.isArray(data.pending)) setPendingApplicants(data.pending);
       }
     } catch (err) {
       console.error("Fetch error:", err);
@@ -384,7 +335,6 @@ export default function Dashboard() {
     const today = new Date().toISOString().slice(0, 10);
     const initialRen = calculateRenewalDateFromBase(today, "1 Month");
     setFormData((prev) => ({ ...prev, admDate: today, renDate: initialRen }));
-    setApprovalFormData((prev) => ({ ...prev, admDate: today, renDate: initialRen }));
     fetchStudents();
   }, []);
 
@@ -434,15 +384,7 @@ export default function Dashboard() {
     setFormData((prev) => ({ ...prev, selectedSeatNum: seatNum, seatNo: `${row}-${seatNum}` }));
   };
 
-  // PURE SORT FUNCTION: HIGHEST DATE ON TOP
-  const sortReceiptsDescending = (logs: RenewalLog[]): RenewalLog[] => {
-    return [...logs].sort((a, b) => {
-      const scoreA = Math.max(getDateNumericScore(a.payDate), getDateNumericScore(a.newRenDate));
-      const scoreB = Math.max(getDateNumericScore(b.payDate), getDateNumericScore(b.newRenDate));
-      return scoreB - scoreA;
-    });
-  };
-
+  // COMPILED HISTORY: SORTED DESCENDING (LATEST TRANSACTION FIRST)
   const getCompiledHistoryForStudent = (st: Student): RenewalLog[] => {
     const rawLogs = renewalHistory.filter(
       (h) =>
@@ -474,13 +416,18 @@ export default function Dashboard() {
       });
     }
 
-    return sortReceiptsDescending(combined);
+    // Latest Date Score on Top (Descending)
+    return combined.sort((a, b) => {
+      const scoreA = Math.max(getDateScore(a.payDate), getDateScore(a.newRenDate));
+      const scoreB = Math.max(getDateScore(b.payDate), getDateScore(b.newRenDate));
+      return scoreB - scoreA;
+    });
   };
 
   const getLatestActivePeriodForStudent = (st: Student) => {
     const compiled = getCompiledHistoryForStudent(st);
     if (compiled.length > 0) {
-      const latest = compiled[0]; // Top one is always latest
+      const latest = compiled[0]; // Top one is latest
       return {
         startDate: formatDateToDDMMYYYY(latest.oldRenDate) || formatDateToDDMMYYYY(st.admDate),
         endDate: formatDateToDDMMYYYY(latest.newRenDate) || formatDateToDDMMYYYY(st.renDate),
@@ -588,124 +535,6 @@ export default function Dashboard() {
       setTimeout(() => fetchStudents(), 1800);
     } catch (err) {
       alert("Renewal save failed.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const openApprovalModal = (applicant: PendingApplicant) => {
-    const today = new Date().toISOString().slice(0, 10);
-    const initialRen = calculateRenewalDateFromBase(today, "1 Month");
-    const freeSeats = getAvailableSeatsForRow("युधिष्ठिर");
-    const firstFree = freeSeats.length > 0 ? String(freeSeats[0]) : "1";
-
-    setApprovalFormData({
-      plan: "1 Month",
-      monthlyFee: 1200,
-      payMode: "Cash",
-      selectedRow: "युधिष्ठिर",
-      selectedSeatNum: firstFree,
-      seatNo: `युधिष्ठिर-${firstFree}`,
-      studentType: "Reserved",
-      admDate: today,
-      renDate: initialRen,
-      batch: "FULL DAY",
-      remarks: "Online QR Admission Approved",
-    });
-    setApprovingApplicant(applicant);
-  };
-
-  const handleConfirmApproval = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!approvingApplicant) return;
-
-    try {
-      setIsSubmitting(true);
-      const generatedId = `DL-${students.length < 9 ? "0" + (students.length + 1) : students.length + 1}`;
-
-      const payload: Record<string, any> = {
-        action: "approve_pending",
-        pendingRowIndex: approvingApplicant.pendingRowIndex,
-        studentId: generatedId,
-        name: approvingApplicant.name,
-        fatherName: approvingApplicant.fatherName,
-        gender: approvingApplicant.gender || "Male",
-        dob: approvingApplicant.dob,
-        phone: approvingApplicant.phone,
-        altPhone: approvingApplicant.altPhone,
-        address: approvingApplicant.address,
-        pincode: approvingApplicant.pincode,
-        idProof: approvingApplicant.idProof,
-        seatNo: approvalFormData.selectedRow === "None" ? "-" : approvalFormData.seatNo,
-        admDate: approvalFormData.admDate,
-        renDate: approvalFormData.renDate,
-        plan: approvalFormData.plan,
-        batch: approvalFormData.batch,
-        course: approvingApplicant.course || approvingApplicant.exam || "-",
-        monthlyFee: Number(approvalFormData.monthlyFee) || 0,
-        payMode: approvalFormData.payMode,
-        studentType: approvalFormData.studentType,
-        remarks: approvalFormData.remarks,
-      };
-
-      const formBody = new URLSearchParams();
-      for (const key in payload) {
-        formBody.append(key, String(payload[key] ?? ""));
-      }
-
-      await fetch(GOOGLE_SCRIPT_URL, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: formBody.toString(),
-      });
-
-      const newRec: Student = {
-        studentId: generatedId,
-        name: approvingApplicant.name,
-        fatherName: approvingApplicant.fatherName,
-        gender: approvingApplicant.gender || "Male",
-        dob: approvingApplicant.dob,
-        phone: approvingApplicant.phone,
-        altPhone: approvingApplicant.altPhone,
-        address: approvingApplicant.address,
-        pincode: approvingApplicant.pincode,
-        idProof: approvingApplicant.idProof,
-        seatNo: payload.seatNo,
-        admDate: approvalFormData.admDate,
-        renDate: approvalFormData.renDate,
-        plan: approvalFormData.plan,
-        batch: approvalFormData.batch,
-        course: payload.course,
-        monthlyFee: payload.monthlyFee,
-        status: "Active",
-        remarks: payload.remarks,
-        studentType: approvalFormData.studentType as any,
-        rowIndex: students.length + 2,
-      };
-
-      setStudents((prev) => [...prev, newRec]);
-      setPendingApplicants((prev) => prev.filter((p) => p.pendingRowIndex !== approvingApplicant.pendingRowIndex));
-      setRenewalHistory((prev) => [
-        {
-          txId: "TX-ADM-" + generatedId,
-          studentId: generatedId,
-          name: approvingApplicant.name,
-          plan: approvalFormData.plan,
-          amount: Number(approvalFormData.monthlyFee) || 0,
-          mode: approvalFormData.payMode,
-          payDate: formatDateToDDMMYYYY(approvalFormData.admDate),
-          oldRenDate: formatDateToDDMMYYYY(approvalFormData.admDate),
-          newRenDate: formatDateToDDMMYYYY(approvalFormData.renDate),
-          remarks: "First Admission Fee (Approved)",
-        },
-        ...prev,
-      ]);
-
-      setApprovingApplicant(null);
-      setTimeout(() => fetchStudents(), 1800);
-    } catch (err) {
-      alert("Approval save failed.");
     } finally {
       setIsSubmitting(false);
     }
@@ -849,7 +678,6 @@ export default function Dashboard() {
   const totalStudents = students.length;
   const activeStudents = students.filter((s) => s.status === "Active").length;
   const inactiveStudents = totalStudents - activeStudents;
-  const pendingCount = pendingApplicants.length;
 
   const activeReservedStudents = students.filter(
     (s) => s.status === "Active" && (s.studentType === "Reserved" || !s.studentType)
@@ -911,12 +739,12 @@ export default function Dashboard() {
       if (a.status === "Active" && b.status === "Active") {
         const periodA = getLatestActivePeriodForStudent(a);
         const periodB = getLatestActivePeriodForStudent(b);
-        return getDateNumericScore(periodA.endDate) - getDateNumericScore(periodB.endDate);
+        return getDateScore(periodA.endDate) - getDateScore(periodB.endDate);
       }
-      return getDateNumericScore(b.renDate) - getDateNumericScore(a.renDate);
+      return getDateScore(b.renDate) - getDateScore(a.renDate);
     });
 
-  // Top Indicators: Checked with Latest Renewed Period
+  // Top Indicators
   const expiredCount = students.filter((s) => {
     if (s.status !== "Active") return false;
     const period = getLatestActivePeriodForStudent(s);
@@ -983,8 +811,10 @@ export default function Dashboard() {
   const displayActive = filteredStudents.filter((s) => s.status === "Active").length;
   const displayInactive = displayTotal - displayActive;
 
-  // DIRECT SORT AT RENDER TIME (GUARANTEED LATEST ON TOP)
-  const historyStudentLogs = viewHistoryStudent ? sortReceiptsDescending(getCompiledHistoryForStudent(viewHistoryStudent)) : [];
+  // DIRECT REVERSED FOR MODAL DISPLAY (LATEST APPENDEED RECORD SHOWN AT TOP)
+  const historyStudentLogs = viewHistoryStudent
+    ? [...getCompiledHistoryForStudent(viewHistoryStudent)]
+    : [];
   const totalPaidByHistoryStudent = historyStudentLogs.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
 
   return (
@@ -1071,42 +901,10 @@ export default function Dashboard() {
                 {emptySeats} Free
               </span>
             </button>
-
-            <button
-              onClick={() => setActiveMenu("Pending")}
-              className={
-                "w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition " +
-                (activeMenu === "Pending"
-                  ? "bg-amber-200/90 text-amber-950 font-bold shadow-sm border border-amber-300"
-                  : "text-neutral-600 hover:bg-[#ede5d4]")
-              }
-            >
-              <div className="flex items-center gap-3">
-                <span>📝</span>
-                <span>Pending Approvals</span>
-              </div>
-              {pendingCount > 0 ? (
-                <span className="text-[10px] bg-amber-500 text-white px-2 py-0.5 rounded-full font-black animate-bounce shadow-sm">
-                  {pendingCount} New
-                </span>
-              ) : (
-                <span className="text-[10px] bg-neutral-200 text-neutral-500 px-2 py-0.5 rounded-full font-bold">
-                  0
-                </span>
-              )}
-            </button>
           </nav>
         </div>
 
-        <div className="w-64 p-3 border-t border-[#e3dccb] space-y-2">
-          <Link
-            href="/admission"
-            target="_blank"
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-[11px] font-black text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-xl transition border border-blue-200"
-          >
-            <span>📱</span> Public Admission QR Form ↗
-          </Link>
-
+        <div className="w-64 p-3 border-t border-[#e3dccb]">
           <Link
             className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-xl transition"
             href="/"
@@ -1137,15 +935,13 @@ export default function Dashboard() {
               {isSidebarOpen ? "◀" : "▶"}
             </button>
             <span className="text-base">
-              {activeMenu === "Seats" ? "🪑" : activeMenu === "Students" ? "👥" : activeMenu === "Pending" ? "📝" : "📊"}
+              {activeMenu === "Seats" ? "🪑" : activeMenu === "Students" ? "👥" : "📊"}
             </span>
             <h2 className="font-extrabold text-neutral-800 text-sm tracking-tight">
               {activeMenu === "Seats"
                 ? "Seat Management Matrix"
                 : activeMenu === "Students"
                 ? "Students Directory"
-                : activeMenu === "Pending"
-                ? "Pending Public Applications"
                 : "Dashboard Overview"}
             </h2>
           </div>
@@ -1261,27 +1057,7 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-2">
-                <div
-                  onClick={() => setActiveMenu("Pending")}
-                  className="bg-[#faf8f4] border-2 border-amber-400 p-6 rounded-2xl cursor-pointer hover:bg-amber-50/50 transition shadow-sm group"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3.5">
-                      <span className="text-2xl p-3 bg-amber-100 rounded-xl">📝</span>
-                      <div>
-                        <h3 className="font-extrabold text-amber-950 group-hover:text-amber-700 transition text-sm">
-                          Pending Approvals ({pendingCount})
-                        </h3>
-                        <p className="text-xs text-neutral-500 mt-0.5">
-                          Review student QR submissions & generate admission receipts.
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-amber-600 font-black">➔</span>
-                  </div>
-                </div>
-
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
                 <div
                   onClick={() => setActiveMenu("Students")}
                   className="bg-[#faf8f4] border border-[#e3dccb] p-6 rounded-2xl cursor-pointer hover:border-amber-600 transition shadow-sm group"
@@ -1320,82 +1096,6 @@ export default function Dashboard() {
                     </div>
                     <span className="text-neutral-400 group-hover:translate-x-1 transition font-bold">➔</span>
                   </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeMenu === "Pending" && (
-            <div className="flex-1 flex flex-col h-full overflow-hidden space-y-3">
-              <div className="bg-[#faf8f4] border border-[#e3dccb] rounded-2xl p-4 flex items-center justify-between shadow-sm flex-shrink-0">
-                <div>
-                  <h3 className="text-sm font-black text-neutral-900">Online QR Admission Submissions</h3>
-                  <p className="text-xs text-neutral-500">
-                    Students who filled the public admission form via mobile QR scan.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-amber-900 bg-amber-100 border border-amber-300 px-3 py-1 rounded-lg">
-                    {pendingCount} Applications Awaiting Review
-                  </span>
-                </div>
-              </div>
-
-              <div className="bg-[#faf8f4] border border-[#e3dccb] rounded-2xl overflow-hidden shadow-sm flex-1 flex flex-col relative">
-                <div className="overflow-x-auto overflow-y-auto flex-1 w-full">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead className="sticky top-0 z-10 border-b border-[#e3dccb] text-neutral-500 font-bold uppercase tracking-wider text-[11px] bg-[#f5f1e8] shadow-sm select-none">
-                      <tr>
-                        <th className="py-3 px-3">#</th>
-                        <th className="py-3 px-4">APPLICANT DETAILS</th>
-                        <th className="py-3 px-4">CONTACT & ADDRESS</th>
-                        <th className="py-3 px-3">EXAM / COURSE</th>
-                        <th className="py-3 px-3">SUBMITTED ON</th>
-                        <th className="py-3 px-4 text-center">ACTION</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#e3dccb]/70 text-neutral-800">
-                      {pendingApplicants.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="py-16 text-center text-neutral-500 font-medium">
-                            Abhi koi pending application nahi hai. Sabhi forms approved hain!
-                          </td>
-                        </tr>
-                      ) : (
-                        pendingApplicants.map((app, idx) => (
-                          <tr key={app.pendingRowIndex || idx} className="hover:bg-[#f2ecde] transition">
-                            <td className="py-3 px-3 font-bold text-neutral-500">{idx + 1}</td>
-                            <td className="py-3 px-4 space-y-0.5">
-                              <p className="font-extrabold text-neutral-900 text-sm">{app.name}</p>
-                              <p className="text-[11px] text-neutral-600">Father: {app.fatherName}</p>
-                              <p className="text-[10px] text-neutral-500 font-mono">Aadhaar: {app.idProof}</p>
-                            </td>
-                            <td className="py-3 px-4 space-y-0.5">
-                              <p className="font-bold text-neutral-900">📞 {app.phone}</p>
-                              <p className="text-[11px] text-neutral-500">Alt: {app.altPhone || "-"}</p>
-                              <p className="text-[11px] text-neutral-500 truncate max-w-xs">{app.address}</p>
-                            </td>
-                            <td className="py-3 px-3">
-                              <span className="inline-block bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded text-[10px] font-bold">
-                                {app.course || app.exam || "General Study"}
-                              </span>
-                            </td>
-                            <td className="py-3 px-3 text-[11px] text-neutral-600 font-medium">
-                              {formatDateToDDMMYYYY(app.date)}
-                            </td>
-                            <td className="py-3 px-4 text-center">
-                              <button
-                                onClick={() => openApprovalModal(app)}
-                                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-lg transition shadow flex items-center gap-1.5 mx-auto"
-                              >
-                                <span>⚡</span> Review & Approve
-                              </button>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
                 </div>
               </div>
             </div>
@@ -1580,7 +1280,7 @@ export default function Dashboard() {
                                 )}
                               </td>
 
-                              {/* LATEST MEMBERSHIP DATES - FROM (GREEN) & TO (RED) */}
+                              {/* CURRENT MEMBERSHIP PERIOD */}
                               <td className="py-3 px-4 space-y-0.5">
                                 <p className="font-bold text-neutral-900">
                                   {activePeriod.plan}
@@ -1842,201 +1542,6 @@ export default function Dashboard() {
         </main>
       </div>
 
-      {/* APPROVAL & RECEIPT MODAL */}
-      {approvingApplicant && (
-        <div
-          onClick={() => setApprovingApplicant(null)}
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="bg-white border border-[#cad5e2] rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden font-sans max-h-[90vh] flex flex-col"
-          >
-            <div className="flex justify-between items-center px-5 py-3.5 border-b border-neutral-100 bg-emerald-50/50">
-              <div>
-                <h3 className="font-extrabold text-neutral-900 text-sm flex items-center gap-1.5">
-                  <span className="text-emerald-700">⚡</span> Approve Admission & Generate Official Receipt
-                </h3>
-                <p className="text-[11px] text-neutral-600 font-semibold mt-0.5">
-                  Applicant: <b>{approvingApplicant.name}</b> (Ph: {approvingApplicant.phone})
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setApprovingApplicant(null)}
-                className="w-6 h-6 rounded-full hover:bg-neutral-100 text-neutral-400 font-bold flex items-center justify-center text-xs transition"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleConfirmApproval} className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">MEMBERSHIP PLAN *</label>
-                  <select
-                    value={approvalFormData.plan}
-                    onChange={(e) => {
-                      const p = e.target.value;
-                      const fee = PLAN_FEE_RATES[p] ?? 1200;
-                      const calc = calculateRenewalDateFromBase(approvalFormData.admDate, p);
-                      setApprovalFormData({ ...approvalFormData, plan: p, monthlyFee: fee, renDate: calc });
-                    }}
-                    className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-2 text-neutral-800 font-bold focus:outline-none focus:border-blue-500 cursor-pointer"
-                  >
-                    <option value="6hrs/Month">6hrs/Month</option>
-                    <option value="1 Month">1 Month</option>
-                    <option value="3 Month">3 Month</option>
-                    <option value="6 Month">6 Month</option>
-                    <option value="9 Month">9 Month</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">STUDENT TYPE</label>
-                  <select
-                    value={approvalFormData.studentType}
-                    onChange={(e) => setApprovalFormData({ ...approvalFormData, studentType: e.target.value })}
-                    className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-2 text-neutral-800 font-bold focus:outline-none focus:border-blue-500 cursor-pointer"
-                  >
-                    <option value="Reserved">Reserved Seat</option>
-                    <option value="Unreserved">Unreserved Shift</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">SELECT CABIN ROW</label>
-                  <select
-                    value={approvalFormData.selectedRow}
-                    onChange={(e) => {
-                      const r = e.target.value;
-                      const free = getAvailableSeatsForRow(r);
-                      const fSeat = free.length > 0 ? String(free[0]) : "";
-                      setApprovalFormData({
-                        ...approvalFormData,
-                        selectedRow: r,
-                        selectedSeatNum: fSeat,
-                        seatNo: fSeat ? `${r}-${fSeat}` : "-",
-                      });
-                    }}
-                    className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-2 text-neutral-800 font-bold focus:outline-none focus:border-blue-500 cursor-pointer"
-                  >
-                    <option value="None">None / No Seat</option>
-                    {LIBRARY_SECTIONS.map((sec) => (
-                      <option key={sec.name} value={sec.name}>
-                        {sec.name} ({sec.count} Seats)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px] flex items-center justify-between">
-                    <span>SELECT FREE CABIN SEAT</span>
-                    <span className="text-emerald-700 text-[9px] font-bold">Free Cabins Only</span>
-                  </label>
-                  <select
-                    disabled={approvalFormData.selectedRow === "None"}
-                    value={approvalFormData.selectedSeatNum}
-                    onChange={(e) => {
-                      const sNum = e.target.value;
-                      setApprovalFormData({
-                        ...approvalFormData,
-                        selectedSeatNum: sNum,
-                        seatNo: sNum === "none" ? "-" : `${approvalFormData.selectedRow}-${sNum}`,
-                      });
-                    }}
-                    className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-2 text-neutral-800 font-bold focus:outline-none focus:border-blue-500 cursor-pointer disabled:bg-neutral-100"
-                  >
-                    {getAvailableSeatsForRow(approvalFormData.selectedRow).map((n) => (
-                      <option key={n} value={n}>
-                        Seat #{n}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">ADMISSION DATE *</label>
-                  <input
-                    type="date"
-                    required
-                    value={approvalFormData.admDate}
-                    onChange={(e) => {
-                      const d = e.target.value;
-                      const calc = calculateRenewalDateFromBase(d, approvalFormData.plan);
-                      setApprovalFormData({ ...approvalFormData, admDate: d, renDate: calc });
-                    }}
-                    className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-1.5 text-neutral-800 font-bold"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px] flex justify-between">
-                    <span>NEXT RENEWAL DATE *</span>
-                    <span className="text-emerald-700 text-[9px] font-bold">Auto-calculated</span>
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={approvalFormData.renDate}
-                    onChange={(e) => setApprovalFormData({ ...approvalFormData, renDate: e.target.value })}
-                    className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-1.5 text-neutral-800 font-bold"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-[#f8fbff] p-3 rounded-xl border border-blue-100">
-                <div>
-                  <label className="block text-neutral-700 font-bold mb-1 uppercase text-[10px]">FEE AMOUNT (₹) *</label>
-                  <input
-                    type="number"
-                    required
-                    value={approvalFormData.monthlyFee}
-                    onChange={(e) => setApprovalFormData({ ...approvalFormData, monthlyFee: Number(e.target.value) })}
-                    className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-neutral-900 font-black text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-neutral-700 font-bold mb-1 uppercase text-[10px]">PAYMENT MODE</label>
-                  <select
-                    value={approvalFormData.payMode}
-                    onChange={(e) => setApprovalFormData({ ...approvalFormData, payMode: e.target.value })}
-                    className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-neutral-800 font-bold focus:outline-none cursor-pointer"
-                  >
-                    <option value="Cash">Cash</option>
-                    <option value="UPI / QR">UPI / QR</option>
-                    <option value="Bank Transfer">Bank Transfer</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2.5 border-t border-neutral-200">
-                <button
-                  type="button"
-                  onClick={() => setApprovingApplicant(null)}
-                  className="px-4 py-2 border border-neutral-300 rounded-lg text-neutral-700 font-bold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-black shadow-md shadow-emerald-600/20"
-                >
-                  {isSubmitting ? "Generating Receipt..." : "✓ Approve & Issue Receipt"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* RENEWAL MODAL */}
       {studentToRenew && (
         <div
@@ -2175,7 +1680,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* RECEIPTS LEDGER MODAL - LATEST TRANSITION TOP PAR (GUARANTEED) */}
+      {/* RECEIPTS LEDGER MODAL - LATEST TRANSITION TOP PAR */}
       {viewHistoryStudent && (
         <div
           onClick={() => setViewHistoryStudent(null)}
@@ -2199,7 +1704,7 @@ export default function Dashboard() {
 
             {/* DIRECT SORT MAP: LATEST TRANSACTION ON TOP */}
             <div className="overflow-y-auto space-y-2 flex-1 text-xs">
-              {sortReceiptsDescending(historyStudentLogs).map((log, i) => (
+              {historyStudentLogs.map((log, i) => (
                 <div key={log.txId || i} className="p-3 border rounded-xl flex justify-between items-center bg-white shadow-sm">
                   <div>
                     <span className="font-black text-emerald-700 text-sm mr-2">₹{log.amount}</span>
