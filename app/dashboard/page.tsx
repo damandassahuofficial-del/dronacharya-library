@@ -158,35 +158,47 @@ export default function Dashboard() {
   };
   const [formData, setFormData] = useState<Student>(initialForm);
 
- const formatDateToDDMMYYYY = (dateStr: any): string => {
+  // Accurate Date Formatter (DD/MM/YYYY)
+  const formatDateToDDMMYYYY = (dateStr: any): string => {
     if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return "-";
-    const s = String(dateStr).trim();
+    const raw = String(dateStr).trim();
+    const cleanStr = raw.split("T")[0].split(" ")[0].trim();
 
-    // 1. Agar pehle se clean DD/MM/YYYY hai (jaise "17/10/2026")
-    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) {
-      const p = s.split("/");
-      return `${p[0].padStart(2, "0")}/${p[1].padStart(2, "0")}/${p[2]}`;
+    if (cleanStr.includes("-")) {
+      const parts = cleanStr.split("-");
+      if (parts.length === 3) {
+        if (parts[0].length === 4) {
+          return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`;
+        } else {
+          return `${parts[0].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[2].slice(0, 4)}`;
+        }
+      }
     }
 
-    // 2. Agar YYYY-MM-DD hai (jaise "2026-10-17")
-    if (/^\d{4}-\d{1,2}-\d{1,2}/.test(s)) {
-      const p = s.split("T")[0].split("-");
-      return `${p[2].padStart(2, "0")}/${p[1].padStart(2, "0")}/${p[0]}`;
+    if (cleanStr.includes("/")) {
+      const parts = cleanStr.split("/");
+      if (parts.length === 3) {
+        if (parts[2].length === 4) {
+          return `${parts[0].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[2]}`;
+        } else if (parts[0].length === 4) {
+          return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`;
+        }
+      }
     }
 
-    // 3. Har tarah ke format ke liye (jaise "Sat Oct 17 2026 ...", ISO strings, timestamps)
-    const d = new Date(s);
-    if (!isNaN(d.getTime())) {
-      const day = String(d.getDate()).padStart(2, "0");
-      const month = String(d.getMonth() + 1).padStart(2, "0");
-      const year = d.getFullYear();
-      return `${day}/${month}/${year}`;
-    }
+    try {
+      const d = new Date(raw);
+      if (!isNaN(d.getTime())) {
+        const day = String(d.getDate()).padStart(2, "0");
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const year = d.getFullYear();
+        return `${day}/${month}/${year}`;
+      }
+    } catch (e) {}
 
-    return s;
+    return cleanStr;
   };
 
-  // Input fields (type="date") ke liye YYYY-MM-DD
   const formatToInputDate = (dateStr: any): string => {
     if (!dateStr || dateStr === "-") return "";
     const raw = String(dateStr).trim();
@@ -269,29 +281,42 @@ export default function Dashboard() {
     return `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(finalDay).padStart(2, "0")}`;
   };
 
-  const parseDateToTimestamp = (dateStr: string): number => {
-    if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return 9999999999999;
-    let cleanStr = String(dateStr).trim().split("T")[0].split(" ")[0];
+  const parseDateToTimestamp = (dateStr: any): number => {
+    if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return 0;
+    const s = String(dateStr).trim().split("T")[0].split(" ")[0];
 
-    if (cleanStr.includes("/")) {
-      const parts = cleanStr.split("/");
+    if (s.includes("/")) {
+      const parts = s.split("/");
       if (parts.length === 3) {
-        return new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10)).getTime();
+        const d = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10) - 1;
+        const y = parseInt(parts[2], 10);
+        const dt = new Date(y, m, d);
+        if (!isNaN(dt.getTime())) return dt.getTime();
       }
     }
 
-    if (cleanStr.includes("-")) {
-      const parts = cleanStr.split("-");
+    if (s.includes("-")) {
+      const parts = s.split("-");
       if (parts.length === 3) {
         if (parts[0].length === 4) {
-          return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10)).getTime();
+          const y = parseInt(parts[0], 10);
+          const m = parseInt(parts[1], 10) - 1;
+          const d = parseInt(parts[2], 10);
+          const dt = new Date(y, m, d);
+          if (!isNaN(dt.getTime())) return dt.getTime();
         } else {
-          return new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10)).getTime();
+          const d = parseInt(parts[0], 10);
+          const m = parseInt(parts[1], 10) - 1;
+          const y = parseInt(parts[2], 10);
+          const dt = new Date(y, m, d);
+          if (!isNaN(dt.getTime())) return dt.getTime();
         }
       }
     }
-    const t = new Date(cleanStr).getTime();
-    return isNaN(t) ? 9999999999999 : t;
+
+    const t = new Date(s).getTime();
+    return isNaN(t) ? 0 : t;
   };
 
   const getRenewalAlertStatus = (
@@ -300,7 +325,7 @@ export default function Dashboard() {
   ): "EXPIRED" | "TODAY" | "WARNING_3DAYS" | "SAFE" => {
     if (status !== "Active" || !renDateStr || renDateStr === "-") return "SAFE";
     const renTs = parseDateToTimestamp(renDateStr);
-    if (renTs === 9999999999999) return "SAFE";
+    if (!renTs) return "SAFE";
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -395,7 +420,7 @@ export default function Dashboard() {
     const rawLogs = renewalHistory.filter(
       (h) =>
         (h.studentId && h.studentId === st.studentId) ||
-        (h.name && h.name.toUpperCase() === st.name.toUpperCase())
+        (h.name && h.name.toUpperCase().trim() === st.name.toUpperCase().trim())
     );
 
     const hasAdmissionLogged = rawLogs.some(
@@ -422,9 +447,10 @@ export default function Dashboard() {
       });
     }
 
+    // Newest/Latest Transaction at Index 0 (Top)
     return combined.sort((a, b) => {
-      const tsA = parseDateToTimestamp(a.newRenDate);
-      const tsB = parseDateToTimestamp(b.newRenDate);
+      const tsA = Math.max(parseDateToTimestamp(a.newRenDate), parseDateToTimestamp(a.payDate));
+      const tsB = Math.max(parseDateToTimestamp(b.newRenDate), parseDateToTimestamp(b.payDate));
       return tsB - tsA;
     });
   };
@@ -436,7 +462,7 @@ export default function Dashboard() {
       return {
         startDate: formatDateToDDMMYYYY(latest.oldRenDate) || formatDateToDDMMYYYY(st.admDate),
         endDate: formatDateToDDMMYYYY(latest.newRenDate) || formatDateToDDMMYYYY(st.renDate),
-        plan: latest.plan || st.plan,
+        plan: latest.plan || st.plan || "1 Month",
       };
     }
     return {
@@ -828,6 +854,7 @@ export default function Dashboard() {
     .reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
   const totalCombinedIncome = allInitialAdmissionFees + allRenewalsFees;
 
+  // Sorting: Active students first, expired/due first within active
   const filteredStudents = students
     .filter((s) => {
       const q = searchQuery.toLowerCase();
@@ -860,22 +887,31 @@ export default function Dashboard() {
       if (a.status !== "Active" && b.status === "Active") return 1;
 
       if (a.status === "Active" && b.status === "Active") {
-        return parseDateToTimestamp(a.renDate) - parseDateToTimestamp(b.renDate);
+        const periodA = getLatestActivePeriodForStudent(a);
+        const periodB = getLatestActivePeriodForStudent(b);
+        return parseDateToTimestamp(periodA.endDate) - parseDateToTimestamp(periodB.endDate);
       }
       return parseDateToTimestamp(b.renDate) - parseDateToTimestamp(a.renDate);
     });
 
-  const expiredCount = students.filter(
-    (s) => s.status === "Active" && getRenewalAlertStatus(s.renDate, s.status) === "EXPIRED"
-  ).length;
+  // Top Indicator Live Counts (Using Latest Renewed Period)
+  const expiredCount = students.filter((s) => {
+    if (s.status !== "Active") return false;
+    const period = getLatestActivePeriodForStudent(s);
+    return getRenewalAlertStatus(period.endDate, s.status) === "EXPIRED";
+  }).length;
 
-  const todayDueCount = students.filter(
-    (s) => s.status === "Active" && getRenewalAlertStatus(s.renDate, s.status) === "TODAY"
-  ).length;
+  const todayDueCount = students.filter((s) => {
+    if (s.status !== "Active") return false;
+    const period = getLatestActivePeriodForStudent(s);
+    return getRenewalAlertStatus(period.endDate, s.status) === "TODAY";
+  }).length;
 
-  const due3DaysCount = students.filter(
-    (s) => s.status === "Active" && getRenewalAlertStatus(s.renDate, s.status) === "WARNING_3DAYS"
-  ).length;
+  const due3DaysCount = students.filter((s) => {
+    if (s.status !== "Active") return false;
+    const period = getLatestActivePeriodForStudent(s);
+    return getRenewalAlertStatus(period.endDate, s.status) === "WARNING_3DAYS";
+  }).length;
 
   const calculateExactVisibleRows = () => {
     if (!tableContainerRef.current) return;
@@ -1384,7 +1420,7 @@ export default function Dashboard() {
                     <option>9 Month</option>
                   </select>
 
-                  {/* TOP LIVE INDICATOR BADGES RESTORED */}
+                  {/* TOP LIVE COLOR INDICATORS - EXACT COUNTS */}
                   <div className="flex items-center gap-2 text-[10px] font-bold px-3 py-1 bg-white/90 border border-[#e3dccb] rounded-lg shadow-sm">
                     <span className="flex items-center gap-1.5 text-rose-800">
                       <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-sm animate-pulse"></span>
@@ -1406,7 +1442,10 @@ export default function Dashboard() {
                 <button
                   onClick={() => {
                     const headers = ["Student ID", "Name", "Gender", "Father Name", "Course Exam", "Mobile", "Seat", "Plan", "Fee", "Status", "Type", "Admission Date", "Renewal Date", "Aadhaar"];
-                    const rows = filteredStudents.map((s) => [s.studentId, s.name, s.gender, s.fatherName, s.course, s.phone, s.seatNo, s.plan, s.monthlyFee, s.status, s.studentType, formatDateToDDMMYYYY(s.admDate), formatDateToDDMMYYYY(s.renDate), s.idProof]);
+                    const rows = filteredStudents.map((s) => {
+                      const period = getLatestActivePeriodForStudent(s);
+                      return [s.studentId, s.name, s.gender, s.fatherName, s.course, s.phone, s.seatNo, period.plan, s.monthlyFee, s.status, s.studentType, period.startDate, period.endDate, s.idProof];
+                    });
                     const csv = "data:text/csv;charset=utf-8," + [headers, ...rows].map((r) => r.join(",")).join("\n");
                     const a = document.createElement("a");
                     a.href = encodeURI(csv);
@@ -1519,7 +1558,7 @@ export default function Dashboard() {
                                 )}
                               </td>
 
-                              {/* CURRENT MEMBERSHIP PERIOD: Proper Dates */}
+                              {/* LATEST MEMBERSHIP DATES - CLEAN DD/MM/YYYY */}
                               <td className="py-3 px-4 space-y-0.5">
                                 <p className="font-bold text-neutral-900">
                                   {activePeriod.plan}
@@ -2155,7 +2194,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ORIGINAL DETAILED "+ ADD STUDENT" & EDIT MODAL RESTORED FULLY */}
+      {/* ORIGINAL DETAILED "+ ADD STUDENT" & EDIT MODAL */}
       {(showAddModal || editStudent) && (
         <div
           onClick={() => {
