@@ -158,54 +158,32 @@ export default function Dashboard() {
   };
   const [formData, setFormData] = useState<Student>(initialForm);
 
-  // SAFE DATE FORMATTER: Timing ko 100% remove karega aur pure DD/MM/YYYY banayega
-  const formatDateToDDMMYYYY = (dateStr: any): string => {
+ const formatDateToDDMMYYYY = (dateStr: any): string => {
     if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return "-";
-    const raw = String(dateStr).trim();
+    const s = String(dateStr).trim();
 
-    // Agar date me time hai (T ya space), toh sirf pehla hissa le lo
-    const cleanStr = raw.split("T")[0].split(" ")[0].trim();
-
-    // 1. Agar YYYY-MM-DD ya DD-MM-YYYY format hai
-    if (cleanStr.includes("-")) {
-      const parts = cleanStr.split("-");
-      if (parts.length === 3) {
-        if (parts[0].length === 4) {
-          // YYYY-MM-DD -> DD/MM/YYYY
-          return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`;
-        } else {
-          // DD-MM-YYYY -> DD/MM/YYYY
-          return `${parts[0].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[2].slice(0, 4)}`;
-        }
-      }
+    // 1. Agar pehle se clean DD/MM/YYYY hai (jaise "17/10/2026")
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) {
+      const p = s.split("/");
+      return `${p[0].padStart(2, "0")}/${p[1].padStart(2, "0")}/${p[2]}`;
     }
 
-    // 2. Agar DD/MM/YYYY ya YYYY/MM/DD format hai
-    if (cleanStr.includes("/")) {
-      const parts = cleanStr.split("/");
-      if (parts.length === 3) {
-        if (parts[2].length === 4) {
-          // Already DD/MM/YYYY
-          return `${parts[0].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[2]}`;
-        } else if (parts[0].length === 4) {
-          // YYYY/MM/DD -> DD/MM/YYYY
-          return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`;
-        }
-      }
+    // 2. Agar YYYY-MM-DD hai (jaise "2026-10-17")
+    if (/^\d{4}-\d{1,2}-\d{1,2}/.test(s)) {
+      const p = s.split("T")[0].split("-");
+      return `${p[2].padStart(2, "0")}/${p[1].padStart(2, "0")}/${p[0]}`;
     }
 
-    // 3. Fallback: JS Date parse
-    try {
-      const d = new Date(raw);
-      if (!isNaN(d.getTime())) {
-        const day = String(d.getDate()).padStart(2, "0");
-        const month = String(d.getMonth() + 1).padStart(2, "0");
-        const year = d.getFullYear();
-        return `${day}/${month}/${year}`;
-      }
-    } catch (e) {}
+    // 3. Har tarah ke format ke liye (jaise "Sat Oct 17 2026 ...", ISO strings, timestamps)
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      const day = String(d.getDate()).padStart(2, "0");
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
+    }
 
-    return cleanStr;
+    return s;
   };
 
   // Input fields (type="date") ke liye YYYY-MM-DD
@@ -456,14 +434,14 @@ export default function Dashboard() {
     if (compiled.length > 0) {
       const latest = compiled[0];
       return {
-        startDate: latest.oldRenDate || st.admDate,
-        endDate: latest.newRenDate || st.renDate,
+        startDate: formatDateToDDMMYYYY(latest.oldRenDate) || formatDateToDDMMYYYY(st.admDate),
+        endDate: formatDateToDDMMYYYY(latest.newRenDate) || formatDateToDDMMYYYY(st.renDate),
         plan: latest.plan || st.plan,
       };
     }
     return {
-      startDate: st.admDate,
-      endDate: st.renDate,
+      startDate: formatDateToDDMMYYYY(st.admDate),
+      endDate: formatDateToDDMMYYYY(st.renDate),
       plan: st.plan || "1 Month",
     };
   };
