@@ -127,13 +127,12 @@ export default function Dashboard() {
   };
   const [formData, setFormData] = useState<Student>(initialForm);
 
-  // 1. PURE NUMERIC DATE SCORE (YYYYMMDD) - GUARANTEED ACCURACY FOR EVERY FORMAT
+  // Exact Numeric Date Score Parser (YYYYMMDD) - Never breaks on any string format
   const getDateScore = (dateStr: any): number => {
     if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return 0;
     const raw = String(dateStr).trim();
     const s = raw.split("T")[0].split(" ")[0];
 
-    // Format DD/MM/YYYY or D/M/YYYY
     if (s.includes("/")) {
       const parts = s.split("/");
       if (parts.length === 3) {
@@ -145,7 +144,6 @@ export default function Dashboard() {
       }
     }
 
-    // Format YYYY-MM-DD or DD-MM-YYYY
     if (s.includes("-")) {
       const parts = s.split("-");
       if (parts.length === 3) {
@@ -170,7 +168,6 @@ export default function Dashboard() {
     return 0;
   };
 
-  // Convert Score back to standard Epoch Timestamp
   const getExactTimestamp = (dateStr: any): number => {
     const score = getDateScore(dateStr);
     if (!score) return 0;
@@ -181,7 +178,6 @@ export default function Dashboard() {
     return new Date(y, m, d).getTime();
   };
 
-  // CLEAN DD/MM/YYYY DISPLAY
   const formatDateToDDMMYYYY = (dateStr: any): string => {
     if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return "-";
     const score = getDateScore(dateStr);
@@ -235,7 +231,6 @@ export default function Dashboard() {
     return `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(finalDay).padStart(2, "0")}`;
   };
 
-  // 2. ACCURATE ALERT STATUS FOR ROW COLORING & COUNTERS
   const getRenewalAlertStatus = (
     renDateStr: string,
     status: string
@@ -253,7 +248,6 @@ export default function Dashboard() {
     if (renScore < currentScore) return "EXPIRED";
     if (renScore === currentScore) return "TODAY";
 
-    // Safe difference for <= 3 days
     const renTs = getExactTimestamp(renDateStr);
     const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
     const diffDays = Math.ceil((renTs - todayZero) / (1000 * 60 * 60 * 24));
@@ -333,7 +327,6 @@ export default function Dashboard() {
     setFormData((prev) => ({ ...prev, selectedSeatNum: seatNum, seatNo: `${row}-${seatNum}` }));
   };
 
-  // COMPILED HISTORY: SORTED STRICTLY DESCENDING (NEWEST TRANSACTION AT TOP)
   const getCompiledHistoryForStudent = (st: Student): RenewalLog[] => {
     const rawLogs = renewalHistory.filter(
       (h) =>
@@ -437,7 +430,7 @@ export default function Dashboard() {
         body: formBody.toString(),
       });
 
-      // Update state: Admission Date freeze, Renewal Date update
+      // Update state: Admission date frozen, renewal date updated
       setStudents((prev) =>
         prev.map((s) =>
           s.rowIndex === studentToRenew.rowIndex
@@ -477,6 +470,7 @@ export default function Dashboard() {
     }
   };
 
+  // FULL DETAILED ORIGINAL ADD STUDENT HANDLER
   const handleSaveStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim() || !formData.phone.trim()) {
@@ -643,7 +637,7 @@ export default function Dashboard() {
     .reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
   const totalCombinedIncome = allInitialAdmissionFees + allRenewalsFees;
 
-  // 3. EXACT URGENCY SORTING (EXPIRED -> TODAY -> DUE <= 3 DAYS -> SAFE DATE)
+  // STRICT ARRANGEMENT: Active students sorted by Urgency (Expired -> Today -> Due in 3 days -> Safe)
   const filteredStudents = students
     .filter((s) => {
       const q = searchQuery.toLowerCase();
@@ -672,25 +666,21 @@ export default function Dashboard() {
       return matchesSearch && matchesStatus && matchesPlan;
     })
     .sort((a, b) => {
-      // Rule 1: Active pehle, Inactive baad mein
       if (a.status === "Active" && b.status !== "Active") return -1;
       if (a.status !== "Active" && b.status === "Active") return 1;
 
-      // Rule 2: Inactive students sorted by date
       if (a.status !== "Active" && b.status !== "Active") {
         return getDateScore(b.renDate) - getDateScore(a.renDate);
       }
 
-      // Rule 3: Active students urgency ranking
       const rank = { EXPIRED: 1, TODAY: 2, WARNING_3DAYS: 3, SAFE: 4 };
       const rankA = rank[getRenewalAlertStatus(a.renDate, a.status)];
       const rankB = rank[getRenewalAlertStatus(b.renDate, b.status)];
 
       if (rankA !== rankB) {
-        return rankA - rankB; // Expired (1) -> Today (2) -> Warning (3) -> Safe (4)
+        return rankA - rankB;
       }
 
-      // Rule 4: Jo renewal date pehle aane wali hai wo pehle aayegi
       return getDateScore(a.renDate) - getDateScore(b.renDate);
     });
 
@@ -1164,7 +1154,7 @@ export default function Dashboard() {
                           const alertStatus = getRenewalAlertStatus(st.renDate, st.status);
                           const isRenewedMember = st.status === "Active" && hasStudentRenewed(st);
 
-                          // SOLID ROW COLORING: High contrast background classes
+                          // HIGH-CONTRAST ROW BACKGROUND COLORING
                           let rowColorClass = "";
                           if (st.status !== "Active") {
                             rowColorClass = "bg-[#eee9dc] opacity-60 hover:opacity-100 hover:bg-[#e4ded0]";
@@ -1226,7 +1216,7 @@ export default function Dashboard() {
                                 )}
                               </td>
 
-                              {/* DIRECT DATES FROM SHEET1 */}
+                              {/* DIRECT FROM SHEET1: PERMANENT ADM DATE & LATEST RENEWAL DATE */}
                               <td className="py-3 px-4 space-y-0.5">
                                 <p className="font-bold text-neutral-900">
                                   {st.plan}
@@ -1788,132 +1778,364 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* DIRECT ADD / EDIT MODAL */}
+      {/* FULL ORIGINAL DETAILED "+ ADD STUDENT" & EDIT MODAL (RESTORED COMPLETE) */}
       {(showAddModal || editStudent) && (
         <div
           onClick={() => {
             setShowAddModal(false);
             setEditStudent(null);
           }}
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-150"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white border rounded-2xl w-full max-w-xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+            className="bg-white border border-neutral-200 rounded-2xl w-full max-w-xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
           >
-            <div className="flex justify-between items-start border-b pb-3">
-              <h3 className="font-bold text-neutral-900 text-base">
-                {editStudent ? "Edit Student Details" : "New Student Admission"}
-              </h3>
-              <button onClick={() => { setShowAddModal(false); setEditStudent(null); }} className="font-bold text-xs">✕</button>
-            </div>
-            <form onSubmit={handleSaveStudent} className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-neutral-600 mb-1 uppercase text-[10px]">Student Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })}
-                    className="w-full bg-neutral-50 border p-2 rounded-lg font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-neutral-600 mb-1 uppercase text-[10px]">Father's Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.fatherName}
-                    onChange={(e) => setFormData({ ...formData, fatherName: e.target.value.toUpperCase() })}
-                    className="w-full bg-neutral-50 border p-2 rounded-lg font-bold"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-neutral-600 mb-1 uppercase text-[10px]">Mobile *</label>
-                  <input
-                    type="tel"
-                    required
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full bg-neutral-50 border p-2 rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-neutral-600 mb-1 uppercase text-[10px]">Alt Contact *</label>
-                  <input
-                    type="tel"
-                    value={formData.altPhone}
-                    onChange={(e) => setFormData({ ...formData, altPhone: e.target.value })}
-                    className="w-full bg-neutral-50 border p-2 rounded-lg"
-                  />
-                </div>
-              </div>
+            <div className="flex justify-between items-start border-b border-neutral-200 pb-3">
               <div>
-                <label className="block font-bold text-neutral-600 mb-1 uppercase text-[10px]">Address</label>
-                <input
-                  type="text"
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value.toUpperCase() })}
-                  className="w-full bg-neutral-50 border p-2 rounded-lg"
-                />
+                <h3 className="font-bold text-neutral-900 text-base flex items-center gap-1.5">
+                  <span className="text-neutral-700 text-lg">+</span> {editStudent ? "Edit Student Details" : "New Student Admission"}
+                </h3>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  Enter details to enroll or update a library member
+                </p>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddModal(false);
+                  setEditStudent(null);
+                }}
+                className="w-6 h-6 rounded-full bg-neutral-100 hover:bg-neutral-200 flex items-center justify-center text-neutral-500 font-bold text-xs transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveStudent} className="space-y-4 text-xs">
+              <div className="space-y-2.5">
+                <p className="text-[11px] font-bold text-blue-600 flex items-center gap-1 tracking-wider uppercase">
+                  <span>👤</span> BASIC DETAILS
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">STUDENT NAME *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="FULL NAME"
+                      value={formData.name || ""}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 uppercase focus:outline-none focus:border-blue-500 font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">FATHER'S NAME *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="FATHER'S NAME"
+                      value={formData.fatherName || ""}
+                      onChange={(e) => setFormData({ ...formData, fatherName: e.target.value.toUpperCase() })}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 uppercase focus:outline-none focus:border-blue-500 font-semibold"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1.5 uppercase text-[10px]">GENDER</label>
+                    <div className="flex items-center gap-4 text-neutral-700 font-semibold pt-1">
+                      {["Male", "Female", "Other"].map((g) => (
+                        <label key={g} className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="gender"
+                            value={g}
+                            checked={formData.gender === g}
+                            onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                            className="accent-blue-600"
+                          />
+                          <span>{g}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">DATE OF BIRTH</label>
+                    <input
+                      type="date"
+                      value={formData.dob || ""}
+                      onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-1.5 text-neutral-700 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2.5 pt-2 border-t border-neutral-100">
+                <p className="text-[11px] font-bold text-blue-600 flex items-center gap-1 tracking-wider uppercase">
+                  <span>📞</span> CONTACT & ADDRESS
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">MOBILE (WHATSAPP) *</label>
+                    <input
+                      type="tel"
+                      required
+                      placeholder="10 DIGIT MOBILE NO."
+                      value={formData.phone || ""}
+                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">PARENTS / ALT CONTACT *</label>
+                    <input
+                      type="tel"
+                      placeholder="10 DIGIT CONTACT NO."
+                      value={formData.altPhone || ""}
+                      onChange={(e) => setFormData({ ...formData, altPhone: e.target.value })}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
                 <div>
-                  <label className="block font-bold text-neutral-600 mb-1 uppercase text-[10px]">Admission Date *</label>
+                  <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">ADDRESS</label>
                   <input
-                    type="date"
-                    required
-                    value={formData.admDate}
-                    onChange={(e) => setFormData({ ...formData, admDate: e.target.value, renDate: calculateRenewalDateFromBase(e.target.value, formData.plan) })}
-                    className="w-full bg-neutral-50 border p-1.5 rounded-lg"
+                    type="text"
+                    placeholder="HOUSE NO, AREA, CITY"
+                    value={formData.address || ""}
+                    onChange={(e) => setFormData({ ...formData, address: e.target.value.toUpperCase() })}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 uppercase focus:outline-none focus:border-blue-500 font-semibold"
                   />
                 </div>
-                <div>
-                  <label className="block font-bold text-neutral-600 mb-1 uppercase text-[10px]">Renewal Date *</label>
-                  <input
-                    type="date"
-                    required
-                    value={formData.renDate}
-                    onChange={(e) => setFormData({ ...formData, renDate: e.target.value })}
-                    className="w-full bg-neutral-50 border p-1.5 rounded-lg"
-                  />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">PINCODE *</label>
+                    <input
+                      type="text"
+                      placeholder="6 DIGIT PINCODE"
+                      value={formData.pincode || ""}
+                      onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px] flex items-center justify-between">
+                      <span>AADHAAR NO. (LAST 4 DIGITS) *</span>
+                      <span className="text-neutral-400 font-normal text-[9px]">Saves as XXXX-XXXX-LAST4</span>
+                    </label>
+                    <div className="flex items-center h-[38px] border border-neutral-200 rounded-lg overflow-hidden bg-neutral-50 focus-within:border-blue-500">
+                      <span className="bg-neutral-100 text-neutral-500 px-3 py-2 font-mono text-xs border-r border-neutral-200 whitespace-nowrap select-none font-bold">
+                        XXXX-XXXX-
+                      </span>
+                      <input
+                        type="text"
+                        maxLength={4}
+                        placeholder="1234"
+                        value={formData.idProof ? formData.idProof.replace(/\D/g, "").slice(-4) : ""}
+                        onChange={(e) => setFormData({ ...formData, idProof: e.target.value.replace(/\D/g, "").slice(0, 4) })}
+                        className="w-full bg-transparent px-3 py-2 text-neutral-800 font-mono tracking-widest text-xs focus:outline-none"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">Select Row</label>
-                  <select
-                    value={formData.selectedRow}
-                    onChange={(e) => handleRowChange(e.target.value)}
-                    className="w-full bg-neutral-50 border p-2 rounded-lg font-bold"
-                  >
-                    <option value="None">None / No Seat</option>
-                    {LIBRARY_SECTIONS.map((sec) => (
-                      <option key={sec.name} value={sec.name}>{sec.name}</option>
-                    ))}
-                  </select>
+
+              <div className="space-y-2.5 pt-2 border-t border-neutral-100">
+                <p className="text-[11px] font-bold text-blue-600 flex items-center gap-1 tracking-wider uppercase">
+                  <span>📚</span> LIBRARY MEMBERSHIP
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">STATUS</label>
+                    <select
+                      value={formData.status || "Active"}
+                      onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 font-bold focus:outline-none focus:border-blue-500 cursor-pointer"
+                    >
+                      <option value="Active">Active</option>
+                      <option value="Inactive">Inactive</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">STATUS TYPE</label>
+                    <select
+                      value={formData.studentType || "Reserved"}
+                      onChange={(e) => setFormData({ ...formData, studentType: e.target.value as any })}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 font-semibold focus:outline-none focus:border-blue-500 cursor-pointer"
+                    >
+                      <option value="Reserved">Reserved</option>
+                      <option value="Unreserved">Unreserved</option>
+                    </select>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">Seat Number</label>
-                  <select
-                    disabled={formData.selectedRow === "None"}
-                    value={formData.selectedSeatNum}
-                    onChange={(e) => handleSeatNumChange(e.target.value)}
-                    className="w-full bg-neutral-50 border p-2 rounded-lg font-bold disabled:bg-neutral-100"
-                  >
-                    {getAvailableSeatsForRow(formData.selectedRow || "", editStudent?.seatNo).map((num) => (
-                      <option key={num} value={num}>Seat #{num}</option>
-                    ))}
-                  </select>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">ADMISSION DATE *</label>
+                    <input
+                      type="date"
+                      required
+                      value={formData.admDate || ""}
+                      onChange={(e) => {
+                        const ren = calculateRenewalDateFromBase(e.target.value, formData.plan);
+                        setFormData({ ...formData, admDate: e.target.value, renDate: ren });
+                      }}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-1.5 text-neutral-800 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px] flex items-center justify-between">
+                      <span>RENEWAL DATE *</span>
+                      <span className="text-emerald-600 text-[9px] font-semibold">Auto-calculated</span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={formData.renDate || ""}
+                      onChange={(e) => setFormData({ ...formData, renDate: e.target.value })}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-1.5 text-neutral-800 focus:outline-none focus:border-blue-500 font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">PLAN DURATION</label>
+                    <select
+                      value={formData.plan || "1 Month"}
+                      onChange={(e) => {
+                        const plan = e.target.value;
+                        const ren = calculateRenewalDateFromBase(formData.admDate, plan);
+                        const autoFee = PLAN_FEE_RATES[plan] ?? 1200;
+                        setFormData({ ...formData, plan, renDate: ren, monthlyFee: autoFee });
+                      }}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 font-semibold focus:outline-none focus:border-blue-500 cursor-pointer"
+                    >
+                      <option value="6hrs/Month">6hrs/Month</option>
+                      <option value="1 Month">1 Month</option>
+                      <option value="3 Month">3 Month</option>
+                      <option value="6 Month">6 Month</option>
+                      <option value="9 Month">9 Month</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px] flex items-center justify-between">
+                      <span>FEE AMOUNT (₹) *</span>
+                      <span className="text-neutral-400 text-[9px] font-normal">Editable</span>
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 1200"
+                      value={formData.monthlyFee === "" ? "" : formData.monthlyFee}
+                      onChange={(e) => setFormData({ ...formData, monthlyFee: e.target.value === "" ? "" : Number(e.target.value) })}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 font-bold text-sm focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">SELECT ROW</label>
+                    <select
+                      value={formData.selectedRow || "None"}
+                      onChange={(e) => handleRowChange(e.target.value)}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 font-bold focus:outline-none focus:border-blue-500 cursor-pointer"
+                    >
+                      <option value="None">None / No Seat (Seat nahi dena)</option>
+                      {LIBRARY_SECTIONS.map((sec) => (
+                        <option key={sec.name} value={sec.name}>
+                          {sec.name} ({sec.count} Seats)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px] flex items-center justify-between">
+                      <span>SELECT AVAILABLE SEAT</span>
+                      <span className="text-emerald-600 text-[9px] font-bold">Only Free Seats</span>
+                    </label>
+                    <select
+                      disabled={formData.selectedRow === "None"}
+                      value={formData.selectedSeatNum || ""}
+                      onChange={(e) => handleSeatNumChange(e.target.value)}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 font-bold focus:outline-none focus:border-blue-500 cursor-pointer disabled:bg-neutral-100 disabled:text-neutral-400"
+                    >
+                      {formData.selectedRow === "None" ? (
+                        <option value="">No Seat Allotted (-)</option>
+                      ) : getAvailableSeatsForRow(formData.selectedRow || "", editStudent?.seatNo).length === 0 ? (
+                        <option value="">No Free Seats in this Row</option>
+                      ) : (
+                        <>
+                          <option value="none">No Seat (-)</option>
+                          {getAvailableSeatsForRow(formData.selectedRow || "", editStudent?.seatNo).map((num) => (
+                            <option key={num} value={num}>
+                              Seat #{num}
+                            </option>
+                          ))}
+                        </>
+                      )}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">BATCH / SHIFT</label>
+                    <input
+                      type="text"
+                      placeholder="E.G. MORNING (6 AM - 2 PM), FULL DAY"
+                      value={formData.batch || ""}
+                      onChange={(e) => setFormData({ ...formData, batch: e.target.value.toUpperCase() })}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 uppercase focus:outline-none focus:border-blue-500 placeholder:text-neutral-400 font-normal"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-neutral-600 font-bold mb-1 uppercase text-[10px]">COURSE / TARGET EXAM</label>
+                    <input
+                      type="text"
+                      placeholder="TARGET EXAM (E.G. UPSC, SSC, GATE, NEET)"
+                      value={formData.course || ""}
+                      onChange={(e) => setFormData({ ...formData, course: e.target.value.toUpperCase() })}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 uppercase focus:outline-none focus:border-blue-500 placeholder:text-neutral-400 font-normal"
+                    />
+                  </div>
                 </div>
               </div>
-              <div className="pt-3 border-t flex justify-end gap-2.5">
-                <button type="button" onClick={() => { setShowAddModal(false); setEditStudent(null); }} className="px-4 py-2 border rounded-lg font-bold">Cancel</button>
-                <button type="submit" disabled={isSubmitting} className="px-5 py-2 bg-blue-600 text-white rounded-lg font-bold">
-                  {isSubmitting ? "Saving..." : "Confirm & Save"}
+
+              <div className="pt-3 border-t border-neutral-200 flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setEditStudent(null);
+                  }}
+                  className="px-4 py-2 border border-neutral-300 rounded-lg text-neutral-700 hover:bg-neutral-100 font-bold transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2 rounded-lg transition shadow-md shadow-blue-500/20"
+                >
+                  {isSubmitting ? "Saving..." : editStudent ? "Update & Save" : "Confirm & Save"}
                 </button>
               </div>
             </form>
