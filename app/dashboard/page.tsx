@@ -127,30 +127,32 @@ export default function Dashboard() {
   };
   const [formData, setFormData] = useState<Student>(initialForm);
 
-  // Exact Clean DD/MM/YYYY Output Formatter
-  const formatDateToDDMMYYYY = (dateStr: any): string => {
-    if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return "-";
+  // 1. PURE NUMERIC DATE SCORE (YYYYMMDD) - GUARANTEED ACCURACY FOR EVERY FORMAT
+  const getDateScore = (dateStr: any): number => {
+    if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return 0;
     const raw = String(dateStr).trim();
-    const cleanStr = raw.split("T")[0].split(" ")[0].trim();
+    const s = raw.split("T")[0].split(" ")[0];
 
-    if (cleanStr.includes("/")) {
-      const parts = cleanStr.split("/");
+    // Format DD/MM/YYYY or D/M/YYYY
+    if (s.includes("/")) {
+      const parts = s.split("/");
       if (parts.length === 3) {
         if (parts[2].length === 4) {
-          return `${parts[0].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[2]}`;
+          return parseInt(`${parts[2]}${parts[1].padStart(2, "0")}${parts[0].padStart(2, "0")}`, 10) || 0;
         } else if (parts[0].length === 4) {
-          return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`;
+          return parseInt(`${parts[0]}${parts[1].padStart(2, "0")}${parts[2].padStart(2, "0")}`, 10) || 0;
         }
       }
     }
 
-    if (cleanStr.includes("-")) {
-      const parts = cleanStr.split("-");
+    // Format YYYY-MM-DD or DD-MM-YYYY
+    if (s.includes("-")) {
+      const parts = s.split("-");
       if (parts.length === 3) {
         if (parts[0].length === 4) {
-          return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`;
-        } else {
-          return `${parts[0].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[2]}`;
+          return parseInt(`${parts[0]}${parts[1].padStart(2, "0")}${parts[2].padStart(2, "0")}`, 10) || 0;
+        } else if (parts[2].length === 4) {
+          return parseInt(`${parts[2]}${parts[1].padStart(2, "0")}${parts[0].padStart(2, "0")}`, 10) || 0;
         }
       }
     }
@@ -158,77 +160,60 @@ export default function Dashboard() {
     try {
       const d = new Date(raw);
       if (!isNaN(d.getTime())) {
-        const day = String(d.getDate()).padStart(2, "0");
-        const month = String(d.getMonth() + 1).padStart(2, "0");
-        const year = d.getFullYear();
-        return `${day}/${month}/${year}`;
+        return parseInt(
+          `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`,
+          10
+        ) || 0;
       }
     } catch (e) {}
 
-    return cleanStr;
+    return 0;
+  };
+
+  // Convert Score back to standard Epoch Timestamp
+  const getExactTimestamp = (dateStr: any): number => {
+    const score = getDateScore(dateStr);
+    if (!score) return 0;
+    const s = String(score);
+    const y = parseInt(s.substring(0, 4), 10);
+    const m = parseInt(s.substring(4, 6), 10) - 1;
+    const d = parseInt(s.substring(6, 8), 10);
+    return new Date(y, m, d).getTime();
+  };
+
+  // CLEAN DD/MM/YYYY DISPLAY
+  const formatDateToDDMMYYYY = (dateStr: any): string => {
+    if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return "-";
+    const score = getDateScore(dateStr);
+    if (!score) return String(dateStr).trim().split("T")[0].split(" ")[0];
+
+    const s = String(score);
+    const y = s.substring(0, 4);
+    const m = s.substring(4, 6);
+    const d = s.substring(6, 8);
+    return `${d}/${m}/${y}`;
   };
 
   const formatToInputDate = (dateStr: any): string => {
     if (!dateStr || dateStr === "-") return "";
-    const raw = String(dateStr).trim();
-    const cleanStr = raw.split("T")[0].split(" ")[0].trim();
+    const score = getDateScore(dateStr);
+    if (!score) return "";
 
-    if (cleanStr.includes("/")) {
-      const parts = cleanStr.split("/");
-      if (parts.length === 3) {
-        if (parts[2].length === 4) {
-          return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
-        }
-      }
-    }
-
-    if (cleanStr.includes("-")) {
-      const parts = cleanStr.split("-");
-      if (parts.length === 3) {
-        if (parts[0].length === 4) return cleanStr;
-        return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
-      }
-    }
-
-    try {
-      const d = new Date(raw);
-      if (!isNaN(d.getTime())) {
-        return d.toISOString().slice(0, 10);
-      }
-    } catch (e) {}
-
-    return "";
+    const s = String(score);
+    const y = s.substring(0, 4);
+    const m = s.substring(4, 6);
+    const d = s.substring(6, 8);
+    return `${y}-${m}-${d}`;
   };
 
   const calculateRenewalDateFromBase = (baseDateStr: string, planStr: string): string => {
     if (!baseDateStr || baseDateStr === "-") return "";
-    let cleanStr = String(baseDateStr).trim().split("T")[0].split(" ")[0];
+    const ts = getExactTimestamp(baseDateStr);
+    const baseDate = ts ? new Date(ts) : new Date();
 
-    let y = 0, m = 0, d = 0;
-    if (cleanStr.includes("-")) {
-      const parts = cleanStr.split("-");
-      if (parts[0].length === 4) {
-        y = parseInt(parts[0], 10);
-        m = parseInt(parts[1], 10);
-        d = parseInt(parts[2], 10);
-      } else {
-        d = parseInt(parts[0], 10);
-        m = parseInt(parts[1], 10);
-        y = parseInt(parts[2], 10);
-      }
-    } else if (cleanStr.includes("/")) {
-      const parts = cleanStr.split("/");
-      d = parseInt(parts[0], 10);
-      m = parseInt(parts[1], 10);
-      y = parseInt(parts[2], 10);
-    }
-
-    if (!y || !m || !d || isNaN(y) || isNaN(m) || isNaN(d)) {
-      const now = new Date();
-      y = now.getFullYear();
-      m = now.getMonth() + 1;
-      d = now.getDate();
-    }
+    let y = baseDate.getFullYear();
+    let m = baseDate.getMonth() + 1;
+    let d = baseDate.getDate();
 
     let monthsToAdd = 1;
     if (planStr.includes("3 Month")) monthsToAdd = 3;
@@ -250,71 +235,29 @@ export default function Dashboard() {
     return `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(finalDay).padStart(2, "0")}`;
   };
 
-  // Convert Date to Number (YYYYMMDD) for accurate sorting & status check
-  const getDateScore = (dateStr: any): number => {
-    if (!dateStr || dateStr === "-" || String(dateStr).trim() === "") return 0;
-    const s = String(dateStr).trim().split("T")[0].split(" ")[0];
-
-    if (s.includes("/")) {
-      const parts = s.split("/");
-      if (parts.length === 3) {
-        if (parts[2].length === 4) {
-          return parseInt(`${parts[2]}${parts[1].padStart(2, "0")}${parts[0].padStart(2, "0")}`, 10) || 0;
-        } else if (parts[0].length === 4) {
-          return parseInt(`${parts[0]}${parts[1].padStart(2, "0")}${parts[2].padStart(2, "0")}`, 10) || 0;
-        }
-      }
-    }
-
-    if (s.includes("-")) {
-      const parts = s.split("-");
-      if (parts.length === 3) {
-        if (parts[0].length === 4) {
-          return parseInt(`${parts[0]}${parts[1].padStart(2, "0")}${parts[2].padStart(2, "0")}`, 10) || 0;
-        } else if (parts[2].length === 4) {
-          return parseInt(`${parts[2]}${parts[1].padStart(2, "0")}${parts[0].padStart(2, "0")}`, 10) || 0;
-        }
-      }
-    }
-
-    try {
-      const d = new Date(s);
-      if (!isNaN(d.getTime())) {
-        return parseInt(`${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`, 10) || 0;
-      }
-    } catch (e) {}
-
-    return 0;
-  };
-
-  // Safe epoch timestamp for exact date math
-  const getExactTimestamp = (dateStr: any): number => {
-    const score = getDateScore(dateStr);
-    if (!score) return 0;
-    const s = String(score);
-    const y = parseInt(s.substring(0, 4), 10);
-    const m = parseInt(s.substring(4, 6), 10) - 1;
-    const d = parseInt(s.substring(6, 8), 10);
-    return new Date(y, m, d).getTime();
-  };
-
-  // Accurate renewal alert status
+  // 2. ACCURATE ALERT STATUS FOR ROW COLORING & COUNTERS
   const getRenewalAlertStatus = (
     renDateStr: string,
     status: string
   ): "EXPIRED" | "TODAY" | "WARNING_3DAYS" | "SAFE" => {
     if (status !== "Active" || !renDateStr || renDateStr === "-") return "SAFE";
-    const renTs = getExactTimestamp(renDateStr);
-    if (!renTs) return "SAFE";
+    const renScore = getDateScore(renDateStr);
+    if (!renScore) return "SAFE";
 
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayTs = today.getTime();
+    const currentScore = parseInt(
+      `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`,
+      10
+    );
 
-    const diffDays = Math.ceil((renTs - todayTs) / (1000 * 60 * 60 * 24));
+    if (renScore < currentScore) return "EXPIRED";
+    if (renScore === currentScore) return "TODAY";
 
-    if (diffDays < 0) return "EXPIRED";
-    if (diffDays === 0) return "TODAY";
+    // Safe difference for <= 3 days
+    const renTs = getExactTimestamp(renDateStr);
+    const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+    const diffDays = Math.ceil((renTs - todayZero) / (1000 * 60 * 60 * 24));
+
     if (diffDays <= 3 && diffDays > 0) return "WARNING_3DAYS";
     return "SAFE";
   };
@@ -390,7 +333,7 @@ export default function Dashboard() {
     setFormData((prev) => ({ ...prev, selectedSeatNum: seatNum, seatNo: `${row}-${seatNum}` }));
   };
 
-  // COMPILED HISTORY: Guaranteed latest transaction at index 0 (Top)
+  // COMPILED HISTORY: SORTED STRICTLY DESCENDING (NEWEST TRANSACTION AT TOP)
   const getCompiledHistoryForStudent = (st: Student): RenewalLog[] => {
     const rawLogs = renewalHistory.filter(
       (h) =>
@@ -422,10 +365,9 @@ export default function Dashboard() {
       });
     }
 
-    // Sort strictly by Date Score Descending (Newest date on top)
     return combined.sort((a, b) => {
-      const scoreA = Math.max(getDateScore(a.payDate), getDateScore(a.newRenDate));
-      const scoreB = Math.max(getDateScore(b.payDate), getDateScore(b.newRenDate));
+      const scoreA = Math.max(getDateScore(a.newRenDate), getDateScore(a.payDate));
+      const scoreB = Math.max(getDateScore(b.newRenDate), getDateScore(b.payDate));
       return scoreB - scoreA;
     });
   };
@@ -495,7 +437,7 @@ export default function Dashboard() {
         body: formBody.toString(),
       });
 
-      // Update state: Admission Date freeze rahegi, Renewal Date update hogi
+      // Update state: Admission Date freeze, Renewal Date update
       setStudents((prev) =>
         prev.map((s) =>
           s.rowIndex === studentToRenew.rowIndex
@@ -701,7 +643,7 @@ export default function Dashboard() {
     .reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
   const totalCombinedIncome = allInitialAdmissionFees + allRenewalsFees;
 
-  // ARRANGEMENT (SORTING): Active students on top, sorted by URGENCY of Renewal Date
+  // 3. EXACT URGENCY SORTING (EXPIRED -> TODAY -> DUE <= 3 DAYS -> SAFE DATE)
   const filteredStudents = students
     .filter((s) => {
       const q = searchQuery.toLowerCase();
@@ -730,26 +672,25 @@ export default function Dashboard() {
       return matchesSearch && matchesStatus && matchesPlan;
     })
     .sort((a, b) => {
-      // 1. Active pehle, Inactive baad mein
+      // Rule 1: Active pehle, Inactive baad mein
       if (a.status === "Active" && b.status !== "Active") return -1;
       if (a.status !== "Active" && b.status === "Active") return 1;
 
-      // 2. Inactive students sorted by date
+      // Rule 2: Inactive students sorted by date
       if (a.status !== "Active" && b.status !== "Active") {
         return getDateScore(b.renDate) - getDateScore(a.renDate);
       }
 
-      // 3. Active students: Urgency priority
-      // EXPIRED (1) -> TODAY (2) -> WARNING <= 3 DAYS (3) -> SAFE (4)
+      // Rule 3: Active students urgency ranking
       const rank = { EXPIRED: 1, TODAY: 2, WARNING_3DAYS: 3, SAFE: 4 };
       const rankA = rank[getRenewalAlertStatus(a.renDate, a.status)];
       const rankB = rank[getRenewalAlertStatus(b.renDate, b.status)];
 
       if (rankA !== rankB) {
-        return rankA - rankB;
+        return rankA - rankB; // Expired (1) -> Today (2) -> Warning (3) -> Safe (4)
       }
 
-      // 4. Same priority mein jo date pehle khatam ho rahi hai wo pehle aayegi
+      // Rule 4: Jo renewal date pehle aane wali hai wo pehle aayegi
       return getDateScore(a.renDate) - getDateScore(b.renDate);
     });
 
@@ -817,7 +758,7 @@ export default function Dashboard() {
   const displayActive = filteredStudents.filter((s) => s.status === "Active").length;
   const displayInactive = displayTotal - displayActive;
 
-  // History list for the modal (Latest on top)
+  // History list for the modal
   const historyStudentLogs = viewHistoryStudent
     ? getCompiledHistoryForStudent(viewHistoryStudent)
     : [];
@@ -948,7 +889,7 @@ export default function Dashboard() {
                 ? "Seat Management Matrix"
                 : activeMenu === "Students"
                 ? "Students Directory"
-                : "TEST VERSION 2.0"}
+                : "Dashboard Overview"}
             </h2>
           </div>
 
@@ -1051,7 +992,7 @@ export default function Dashboard() {
                       <p className="text-[11px] font-bold tracking-widest uppercase opacity-90">TOTAL COLLECTION (LEDGER)</p>
                       <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-bold">Lifetime</span>
                     </div>
-                    <p className="text-4xl font-black mt-2 tracking-tight">₹{totalCombinedIncome.toLocaleString("en-IN")}</p>
+                    <p className="text-4xl font-black mt-2 tracking-tight">{totalCombinedIncome.toLocaleString("en-IN")}</p>
                   </div>
 
                   <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs font-semibold">
@@ -1223,16 +1164,16 @@ export default function Dashboard() {
                           const alertStatus = getRenewalAlertStatus(st.renDate, st.status);
                           const isRenewedMember = st.status === "Active" && hasStudentRenewed(st);
 
-                          // ROW COLORING LOGIC
+                          // SOLID ROW COLORING: High contrast background classes
                           let rowColorClass = "";
                           if (st.status !== "Active") {
-                            rowColorClass = "bg-[#eee9dc]/80 opacity-60 hover:opacity-100 hover:bg-[#e4ded0]";
+                            rowColorClass = "bg-[#eee9dc] opacity-60 hover:opacity-100 hover:bg-[#e4ded0]";
                           } else if (alertStatus === "EXPIRED") {
-                            rowColorClass = "bg-rose-100/90 border-l-4 border-l-rose-500 hover:bg-rose-200/90";
+                            rowColorClass = "bg-rose-100 border-l-4 border-l-rose-600 hover:bg-rose-200";
                           } else if (alertStatus === "TODAY") {
-                            rowColorClass = "bg-orange-100/90 border-l-4 border-l-orange-500 hover:bg-orange-200/90";
+                            rowColorClass = "bg-orange-100 border-l-4 border-l-orange-500 hover:bg-orange-200";
                           } else if (alertStatus === "WARNING_3DAYS") {
-                            rowColorClass = "bg-amber-100/80 border-l-4 border-l-amber-400 hover:bg-amber-200/80";
+                            rowColorClass = "bg-amber-100 border-l-4 border-l-amber-400 hover:bg-amber-200";
                           } else {
                             rowColorClass = idx % 2 === 0 ? "bg-[#faf8f4] hover:bg-[#ebe3d3]" : "bg-[#f4efe4] hover:bg-[#ebe3d3]";
                           }
@@ -1285,7 +1226,7 @@ export default function Dashboard() {
                                 )}
                               </td>
 
-                              {/* DIRECT FROM SHEET1: PERMANENT ADM DATE & LATEST RENEWAL DATE */}
+                              {/* DIRECT DATES FROM SHEET1 */}
                               <td className="py-3 px-4 space-y-0.5">
                                 <p className="font-bold text-neutral-900">
                                   {st.plan}
